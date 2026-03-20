@@ -1,0 +1,165 @@
+# Chess App
+
+A chess application with multiple AI engines, built with Next.js and Python FastAPI.
+
+## Prerequisites
+
+- **Node.js** (v18+)
+- **Python 3.11** (install via `py install 3.11` on Windows)
+
+## Quick Start
+
+```bash
+# 1. Install frontend dependencies
+npm install
+
+# 2. Start the frontend (http://localhost:3000)
+npm run dev
+
+# 3. Set up the backend (in a separate terminal)
+cd backend
+py -3.11 -m venv venv
+venv\Scripts\pip.exe install -r requirements.txt
+venv\Scripts\pip.exe install torch --index-url https://download.pytorch.org/whl/cu128
+
+# 4. Start the backend (http://localhost:8000)
+venv\Scripts\python.exe -m uvicorn main:app --reload --port 8000
+```
+
+> For CPU-only PyTorch (no NVIDIA GPU), replace `cu128` with `cpu` in the torch install command.
+
+## Commands
+
+### Frontend
+
+```bash
+# Development server with hot reload
+npm run dev
+
+# Production build
+npm run build
+
+# Start production server
+npm run start
+```
+
+### Backend
+
+All backend commands should be run from the `backend/` directory.
+
+```bash
+# Start the backend server
+venv\Scripts\python.exe -m uvicorn main:app --reload --port 8000
+
+# Health check
+curl http://localhost:8000/api/health
+
+# List available engines
+curl http://localhost:8000/api/models
+```
+
+### Training Pipeline
+
+Train a neural network to evaluate chess positions using games from the Lichess open database.
+
+```bash
+# Step 1: Download games from Lichess
+venv\Scripts\python.exe -u -m training.download_data --month 2013-01 --max-games 50000 --min-rating 1500
+
+# Step 2: Prepare training tensors from the downloaded games
+venv\Scripts\python.exe -u -m training.prepare_dataset
+
+# Step 3: Train the model
+venv\Scripts\python.exe -u -m training.train --epochs 30 --batch-size 512
+
+# Step 4: Evaluate the trained model
+venv\Scripts\python.exe -u -m training.evaluate_model
+```
+
+Trained models (`.pt` files) are saved to `backend/models/` and auto-discovered when the backend starts.
+
+#### Training Options
+
+```bash
+# Download from a different month (larger months = more games)
+venv\Scripts\python.exe -u -m training.download_data --month 2015-06 --max-games 100000
+
+# Prepare with custom sample rate (lower = smaller dataset, faster training)
+venv\Scripts\python.exe -u -m training.prepare_dataset --sample-rate 0.15 --output data/training_data_small.pt
+
+# Train with custom parameters
+venv\Scripts\python.exe -u -m training.train \
+  --data data/training_data.pt \
+  --output models/chess_value_v2.pt \
+  --epochs 50 \
+  --batch-size 1024 \
+  --lr 0.001 \
+  --patience 8
+
+# Evaluate a specific model
+venv\Scripts\python.exe -u -m training.evaluate_model --model models/chess_value_v2.pt
+```
+
+### Engine Tournament
+
+Compare engines by running automated matches between them.
+
+```bash
+# List all available engines
+venv\Scripts\python.exe -u -m training.tournament --list
+
+# Round-robin tournament (all engines, 10 games per pairing)
+venv\Scripts\python.exe -u -m training.tournament --games 10
+
+# Head-to-head between specific engines
+venv\Scripts\python.exe -u -m training.tournament --engines nn-chess_value_v1 minimax-d3 material --games 20
+
+# Verbose mode (show individual game results)
+venv\Scripts\python.exe -u -m training.tournament --engines nn-chess_value_v1 nn-chess_value_v2 --games 30 -v
+```
+
+## AI Engines
+
+| Engine | Type | Description |
+|--------|------|-------------|
+| `random` | Classical | Picks any legal move at random |
+| `material` | Classical | Greedy material capture, depth-1 lookahead |
+| `minimax-d3` | Classical | Minimax with alpha-beta pruning, depth 3 |
+| `minimax-d5` | Classical | Minimax with alpha-beta pruning, depth 5 |
+| `mcts` | Classical | Monte Carlo Tree Search, 800 simulations |
+| `nn-*` | ML | Neural network evaluation + minimax depth 2 |
+
+## Project Structure
+
+```
+chess-app/
+├── src/                    # Next.js frontend
+│   ├── components/         # React components (Board, ChessGame, etc.)
+│   ├── hooks/              # Custom hooks (useChessGame, useAIGame, etc.)
+│   ├── contexts/           # Theme context
+│   ├── data/               # Opening database (openings.json)
+│   ├── services/           # API client
+│   └── utils/              # PGN, game history, openings utilities
+├── backend/
+│   ├── main.py             # FastAPI app entry point
+│   ├── config.py           # CORS and app configuration
+│   ├── engines/            # AI engine implementations
+│   │   ├── base.py         # Abstract engine base class
+│   │   ├── random_engine.py
+│   │   ├── material_engine.py
+│   │   ├── minimax_engine.py
+│   │   ├── mcts_engine.py
+│   │   ├── nn_model.py     # ResNet value network (PyTorch)
+│   │   └── nn_engine.py    # NN-based engine + model auto-discovery
+│   ├── training/           # ML training pipeline
+│   │   ├── download_data.py
+│   │   ├── prepare_dataset.py
+│   │   ├── board_encoding.py
+│   │   ├── train.py
+│   │   ├── evaluate_model.py
+│   │   └── tournament.py
+│   ├── routers/            # API route handlers
+│   ├── models/             # Trained .pt model files (gitignored)
+│   └── data/               # Training data (gitignored)
+└── scripts/                # Build utilities (openings DB generator)
+```

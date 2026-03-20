@@ -13,6 +13,7 @@ from engines.random_engine import RandomEngine
 from engines.material_engine import MaterialEngine
 from engines.minimax_engine import MinimaxEngine
 from engines.mcts_engine import MCTSEngine
+from engines.nn_engine import discover_models
 from routers import moves, models
 
 # ─── Create the FastAPI app ───────────────────────────────────────────────────
@@ -52,6 +53,12 @@ register_engine(MaterialEngine())
 register_engine(MinimaxEngine(depth=3))
 register_engine(MinimaxEngine(depth=5))
 register_engine(MCTSEngine(simulations=800))
+
+# Auto-discover trained neural network models
+nn_engines = discover_models()
+for nn_engine in nn_engines:
+    register_engine(nn_engine)
+
 print(f"Total engines: {len(engine_registry)}\n")
 
 # Share the registry with routers
