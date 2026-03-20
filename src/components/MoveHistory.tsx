@@ -14,12 +14,12 @@ export default function MoveHistory({
   currentMoveIndex,
   onMoveClick,
 }: MoveHistoryProps) {
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const { theme } = useTheme();
 
   useEffect(() => {
-    if (currentMoveIndex === undefined) {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (currentMoveIndex === undefined && containerRef.current) {
+      containerRef.current.scrollTop = containerRef.current.scrollHeight;
     }
   }, [history.length, currentMoveIndex]);
 
@@ -49,7 +49,7 @@ export default function MoveHistory({
       <h3 className={`text-sm font-semibold ${theme.textMuted} uppercase tracking-wide mb-2`}>
         Move History
       </h3>
-      <div className={`flex-1 overflow-y-auto ${theme.panel} rounded-lg p-3 min-h-[120px] max-h-[300px]`}>
+      <div ref={containerRef} className={`flex-1 overflow-y-auto ${theme.panel} rounded-lg p-3 min-h-[120px] max-h-[300px]`}>
         {pairs.length === 0 ? (
           <p className={`${theme.textMuted} text-sm italic`}>No moves yet</p>
         ) : (
@@ -75,7 +75,6 @@ export default function MoveHistory({
             ))}
           </div>
         )}
-        <div ref={bottomRef} />
       </div>
     </div>
   );
