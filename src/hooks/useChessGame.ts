@@ -34,7 +34,8 @@ function classifyMove(move: Move, game: Chess): MoveType {
   return "move";
 }
 
-export function useChessGame() {
+export function useChessGame(options?: { autoFlip?: boolean }) {
+  const autoFlip = options?.autoFlip ?? true;
   const gameRef = useRef<Chess>(new Chess());
   const [fen, setFen] = useState<string>(gameRef.current.fen());
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
@@ -72,8 +73,10 @@ export function useChessGame() {
     setMoveHistory(game.history());
     setSelectedSquare(null);
     setLegalMoves([]);
-    setBoardOrientation(game.turn() === "w" ? "white" : "black");
-  }, [game]);
+    if (autoFlip) {
+      setBoardOrientation(game.turn() === "w" ? "white" : "black");
+    }
+  }, [game, autoFlip]);
 
   const getStatus = useCallback((): string => {
     if (game.isCheckmate()) {

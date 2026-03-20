@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useChessGame } from "@/hooks/useChessGame";
+import { useAIGame } from "@/hooks/useAIGame";
 import { useReplayMode } from "@/hooks/useReplayMode";
 import { useSoundEffects } from "@/hooks/useSoundEffects";
 import { useChessClock } from "@/hooks/useChessClock";
@@ -14,6 +15,7 @@ import MoveHistory from "./MoveHistory";
 import CapturedPieces from "./CapturedPieces";
 import ThemeSelector from "./ThemeSelector";
 import OpeningLabel from "./OpeningLabel";
+import GameModeSelector from "./GameModeSelector";
 import ReplayControls from "./ReplayControls";
 import GameHistoryPanel from "./GameHistoryPanel";
 import PGNModal from "./PGNModal";
@@ -21,14 +23,13 @@ import SoundToggle from "./SoundToggle";
 import ChessClock from "./ChessClock";
 
 export default function ChessGame() {
-  const chessGame = useChessGame();
+  // AI state needs to be declared before useChessGame so we can pass autoFlip option
+  const [aiActive, setAiActive] = useState(false);
+
+  const chessGame = useChessGame({ autoFlip: !aiActive });
   const replay = useReplayMode();
   const sound = useSoundEffects();
   const clock = useChessClock();
-
-  const [showHistory, setShowHistory] = useState(false);
-  const [showPGN, setShowPGN] = useState(false);
-  const [gameEndSaved, setGameEndSaved] = useState(false);
 
   const {
     fen,
@@ -46,10 +47,28 @@ export default function ChessGame() {
     onSquareClick,
     onPieceDrop,
     onPieceDragBegin,
+    makeMoveFromSAN,
     undoMove,
     flipBoard,
     newGame,
   } = chessGame;
+
+  const ai = useAIGame({
+    fen,
+    turn,
+    isGameOver,
+    moveHistory,
+    makeMoveFromSAN,
+  });
+
+  // Keep aiActive in sync with the AI toggle
+  useEffect(() => {
+    setAiActive(ai.aiEnabled);
+  }, [ai.aiEnabled]);
+
+  const [showHistory, setShowHistory] = useState(false);
+  const [showPGN, setShowPGN] = useState(false);
+  const [gameEndSaved, setGameEndSaved] = useState(false);
 
   // Play sound on each move
   useEffect(() => {
@@ -62,10 +81,8 @@ export default function ChessGame() {
   useEffect(() => {
     if (moveHistory.length === 0) return;
     if (moveHistory.length === 1 && clock.isEnabled && !clock.isRunning) {
-      // Start the clock on first move
       clock.startClock();
     }
-    // The player who just moved is the opposite of current turn
     const justMoved = turn === "white" ? "black" : "white";
     clock.switchClock(justMoved as "white" | "black");
   }, [moveHistory.length]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -78,12 +95,12 @@ export default function ChessGame() {
         moves: moveHistory,
         result: getGameResult(),
         opening,
-        whitePlayer: "Player 1",
-        blackPlayer: "Player 2",
+        whitePlayer: ai.aiEnabled && ai.playerColor === "black" ? "AI" : "Player 1",
+        blackPlayer: ai.aiEnabled && ai.playerColor === "white" ? "AI" : "Player 2",
       });
       setGameEndSaved(true);
     }
-  }, [isGameOver, gameEndSaved, moveHistory, currentOpening, getGameResult]);
+  }, [isGameOver, gameEndSaved, moveHistory, currentOpening, getGameResult, ai.aiEnabled, ai.playerColor]);
 
   // Check for timeout
   const timeoutMessage = clock.whiteTimedOut
@@ -92,14 +109,20 @@ export default function ChessGame() {
     ? "Black ran out of time! White wins!"
     : null;
 
-  // Handle new game with clock reset
+  // Handle undo — in AI mode, undo 2 moves (AI + human)
+  const handleUndo = useCallback(() => {
+    const count = ai.aiEnabled ? ai.aiUndoCount : 1;
+    for (let i = 0; i < count; i++) {
+      undoMove();
+    }
+  }, [undoMove, ai.aiEnabled, ai.aiUndoCount]);
+
   const handleNewGame = useCallback(() => {
     newGame();
     clock.resetClock();
     setGameEndSaved(false);
   }, [newGame, clock]);
 
-  // Handle replay
   const handleStartReplay = useCallback(
     (moves: string[]) => {
       replay.startReplay(moves);
@@ -108,7 +131,6 @@ export default function ChessGame() {
     [replay]
   );
 
-  // Handle PGN import -> replay
   const handlePGNImport = useCallback(
     (moves: string[]) => {
       replay.startReplay(moves);
@@ -125,9 +147,17 @@ export default function ChessGame() {
     );
   }
 
-  // Determine which FEN and orientation to show
+  // In AI mode, lock the board during AI's turn
+  const isAITurn = ai.aiEnabled && turn !== ai.playerColor;
+  const boardDisabled = replay.isActive || isAITurn || ai.aiThinking;
+
+  // Determine display state
   const displayFen = replay.isActive ? replay.displayFen : fen;
-  const displayOrientation = replay.isActive ? "white" : boardOrientation;
+  const displayOrientation = replay.isActive
+    ? "white"
+    : ai.aiEnabled
+    ? ai.playerColor
+    : boardOrientation;
   const replayOpening = replay.isActive
     ? findOpening(replay.moves.slice(0, replay.currentIndex + 1))
     : null;
@@ -139,16 +169,32 @@ export default function ChessGame() {
         <Board
           fen={displayFen}
           boardOrientation={displayOrientation}
-          squareStyles={replay.isActive ? {} : squareStyles}
-          onSquareClick={replay.isActive ? () => {} : onSquareClick}
-          onPieceDrop={replay.isActive ? () => false : onPieceDrop}
-          onPieceDragBegin={replay.isActive ? () => {} : onPieceDragBegin}
+          squareStyles={boardDisabled ? {} : squareStyles}
+          onSquareClick={boardDisabled ? () => {} : onSquareClick}
+          onPieceDrop={boardDisabled ? () => false : onPieceDrop}
+          onPieceDragBegin={boardDisabled ? () => {} : onPieceDragBegin}
         />
       </div>
 
       {/* Sidebar */}
       <div className="w-full lg:w-72 flex flex-col gap-4">
         <ThemeSelector />
+
+        {/* AI Mode Selector */}
+        {!replay.isActive && (
+          <GameModeSelector
+            aiEnabled={ai.aiEnabled}
+            aiThinking={ai.aiThinking}
+            selectedEngine={ai.selectedEngine}
+            playerColor={ai.playerColor}
+            availableModels={ai.availableModels}
+            backendOnline={ai.backendOnline}
+            error={ai.error}
+            onToggleAI={ai.toggleAI}
+            onSetEngine={ai.setEngine}
+            onSetColor={ai.setColor}
+          />
+        )}
 
         <OpeningLabel opening={replay.isActive ? replayOpening : currentOpening} />
 
@@ -187,10 +233,10 @@ export default function ChessGame() {
         ) : (
           <>
             <GameControls
-              onUndo={undoMove}
+              onUndo={handleUndo}
               onFlip={flipBoard}
               onNewGame={handleNewGame}
-              canUndo={moveHistory.length > 0}
+              canUndo={moveHistory.length > 0 && !ai.aiThinking}
             />
             <div className="flex flex-wrap gap-2">
               <SoundToggle muted={sound.muted} onToggle={sound.toggleMute} />
