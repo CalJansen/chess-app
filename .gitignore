@@ -30,3 +30,4 @@ backend/*.pyc
 backend/**/*.pyc
 backend/models/*.pt
 backend/data/
+backend/stockfish/

@@ -8,6 +8,7 @@ PORT = 8000
 
 # Paths
 MODEL_DIR = "models"
+STOCKFISH_DIR = "stockfish"
 
 # CORS - allowed frontend origins
 ALLOWED_ORIGINS = [
