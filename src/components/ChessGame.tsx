@@ -160,6 +160,17 @@ export default function ChessGame() {
     [replay]
   );
 
+  // Determine display state (must be above early return so hooks are consistent)
+  const displayFen = replay.isActive ? replay.displayFen : fen;
+  const displayOrientation = replay.isActive
+    ? "white"
+    : ai.aiEnabled
+    ? ai.playerColor
+    : boardOrientation;
+
+  // Stockfish evaluation — must be called before any early returns (Rules of Hooks)
+  const evaluation = useStockfishEval({ fen: displayFen, enabled: analysisEnabled });
+
   if (!initialized) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -172,19 +183,9 @@ export default function ChessGame() {
   const isAITurn = ai.aiEnabled && turn !== ai.playerColor;
   const boardDisabled = replay.isActive || isAITurn || ai.aiThinking;
 
-  // Determine display state
-  const displayFen = replay.isActive ? replay.displayFen : fen;
-  const displayOrientation = replay.isActive
-    ? "white"
-    : ai.aiEnabled
-    ? ai.playerColor
-    : boardOrientation;
   const replayOpening = replay.isActive
     ? findOpening(replay.moves.slice(0, replay.currentIndex + 1))
     : null;
-
-  // Stockfish evaluation — runs on the currently displayed position
-  const evaluation = useStockfishEval({ fen: displayFen, enabled: analysisEnabled });
 
   // Build best-move arrow from Stockfish's recommendation
   const bestMoveArrows =
