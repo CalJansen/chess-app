@@ -39,7 +39,8 @@ def _find_stockfish_binary() -> str | None:
     for pattern in patterns:
         matches = glob.glob(pattern)
         if matches:
-            return matches[0]
+            # Return absolute path — required on Windows for subprocess
+            return os.path.abspath(matches[0])
     return None
 
 
