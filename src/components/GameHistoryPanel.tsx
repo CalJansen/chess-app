@@ -5,7 +5,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { getSavedGames, deleteGame, SavedGame } from "@/utils/gameHistory";
 
 interface GameHistoryPanelProps {
-  onReplay: (moves: string[]) => void;
+  onReplay: (moves: string[], whitePlayer?: string, blackPlayer?: string) => void;
   onClose: () => void;
 }
 
@@ -54,13 +54,16 @@ export default function GameHistoryPanel({ onReplay, onClose }: GameHistoryPanel
                 <span className={`text-xs ${theme.textMuted}`}>{formatDate(game.date)}</span>
                 <span className={`text-xs font-bold ${theme.textSecondary}`}>{game.result}</span>
               </div>
+              <p className={`text-xs font-medium ${theme.textPrimary}`}>
+                {game.whitePlayer || "Player 1"} vs {game.blackPlayer || "Player 2"}
+              </p>
               {game.opening && (
                 <p className={`text-xs ${theme.textSecondary}`}>{game.opening}</p>
               )}
               <p className={`text-xs ${theme.textMuted}`}>{game.moves.length} moves</p>
               <div className="flex gap-2 mt-1">
                 <button
-                  onClick={() => onReplay(game.moves)}
+                  onClick={() => onReplay(game.moves, game.whitePlayer, game.blackPlayer)}
                   className="px-2 py-1 text-xs bg-blue-700 hover:bg-blue-600 text-white rounded transition-colors"
                 >
                   Replay

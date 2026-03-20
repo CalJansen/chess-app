@@ -18,15 +18,10 @@ export default function ThemeSelector() {
             className={`w-7 h-7 rounded-full border-2 transition-all ${
               themeName === name
                 ? "border-white scale-110 shadow-lg"
-                : "border-transparent opacity-70 hover:opacity-100"
+                : "border-gray-400/50 opacity-70 hover:opacity-100"
             }`}
             style={{ backgroundColor: themes[name].swatch }}
-          >
-            {/* Light theme gets an inner border for visibility */}
-            {name === "light" && (
-              <span className="block w-full h-full rounded-full border border-stone-300" />
-            )}
-          </button>
+          />
         ))}
       </div>
     </div>

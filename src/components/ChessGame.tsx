@@ -9,11 +9,12 @@ import { useChessClock } from "@/hooks/useChessClock";
 import { useStockfishEval } from "@/hooks/useStockfishEval";
 import { saveCompletedGame } from "@/utils/gameHistory";
 import { findOpening } from "@/utils/openings";
+import { getPlayerName, setPlayerName as persistPlayerName } from "@/utils/playerName";
 import Board from "./Board";
 import GameStatus from "./GameStatus";
 import GameControls from "./GameControls";
 import MoveHistory from "./MoveHistory";
-import CapturedPieces from "./CapturedPieces";
+import PlayerNameBar from "./PlayerNameBar";
 import ThemeSelector from "./ThemeSelector";
 import OpeningLabel from "./OpeningLabel";
 import GameModeSelector from "./GameModeSelector";
@@ -24,6 +25,7 @@ import SoundToggle from "./SoundToggle";
 import ChessClock from "./ChessClock";
 import EvalBar from "./EvalBar";
 import AnalysisToggle from "./AnalysisToggle";
+import GameOverOverlay from "./GameOverOverlay";
 
 export default function ChessGame() {
   // AI state needs to be declared before useChessGame so we can pass autoFlip option
@@ -41,6 +43,7 @@ export default function ChessGame() {
     moveHistory,
     turn,
     isGameOver,
+    inCheck,
     currentOpening,
     lastMoveType,
     initialized,
@@ -83,6 +86,16 @@ export default function ChessGame() {
     return localStorage.getItem("chess-analysis-arrows") !== "false";
   });
 
+  // Player name state
+  const [playerName, setPlayerNameState] = useState("Player 1");
+  useEffect(() => {
+    setPlayerNameState(getPlayerName());
+  }, []);
+  const handlePlayerNameChange = useCallback((name: string) => {
+    setPlayerNameState(name);
+    persistPlayerName(name);
+  }, []);
+
   // Persist analysis preferences
   useEffect(() => {
     localStorage.setItem("chess-analysis-enabled", String(analysisEnabled));
@@ -116,8 +129,8 @@ export default function ChessGame() {
         moves: moveHistory,
         result: getGameResult(),
         opening,
-        whitePlayer: ai.aiEnabled && ai.playerColor === "black" ? "AI" : "Player 1",
-        blackPlayer: ai.aiEnabled && ai.playerColor === "white" ? "AI" : "Player 2",
+        whitePlayer: ai.aiEnabled && ai.playerColor === "black" ? ai.selectedEngine : playerName,
+        blackPlayer: ai.aiEnabled && ai.playerColor === "white" ? ai.selectedEngine : (ai.aiEnabled ? playerName : "Player 2"),
       });
       setGameEndSaved(true);
     }
@@ -145,8 +158,8 @@ export default function ChessGame() {
   }, [newGame, clock]);
 
   const handleStartReplay = useCallback(
-    (moves: string[]) => {
-      replay.startReplay(moves);
+    (moves: string[], whitePlayer?: string, blackPlayer?: string) => {
+      replay.startReplay(moves, whitePlayer, blackPlayer);
       setShowHistory(false);
     },
     [replay]
@@ -199,9 +212,37 @@ export default function ChessGame() {
         ]
       : [];
 
+  // Derive player names for the board name bars
+  const captured = getCapturedPieces();
+  const bottomColor = displayOrientation;
+  const topColor = displayOrientation === "white" ? "black" : "white";
+
+  const getNameForColor = (color: "white" | "black"): string => {
+    if (replay.isActive) {
+      return color === "white" ? (replay.whitePlayer || "White") : (replay.blackPlayer || "Black");
+    }
+    if (ai.aiEnabled) {
+      return color === ai.playerColor ? playerName : ai.selectedEngine;
+    }
+    return color === "white" ? playerName : "Player 2";
+  };
+
+  const isEditable = (color: "white" | "black"): boolean => {
+    if (replay.isActive) return false;
+    if (ai.aiEnabled) return color === ai.playerColor;
+    return color === "white"; // Only white player name is editable in PvP
+  };
+
+  // Review handler for game-over overlay
+  const handleReview = useCallback(() => {
+    if (moveHistory.length > 0) {
+      replay.startReplay(moveHistory);
+    }
+  }, [moveHistory, replay]);
+
   return (
     <div className="flex flex-col lg:flex-row gap-6 p-6 max-w-5xl mx-auto min-h-screen items-center lg:items-start justify-center">
-      {/* Board area: eval bar + board */}
+      {/* Board area: eval bar + player names + board */}
       <div className="flex-shrink-0 flex flex-row items-stretch">
         {analysisEnabled && (
           <EvalBar
@@ -211,15 +252,42 @@ export default function ChessGame() {
             boardOrientation={displayOrientation}
           />
         )}
-        <Board
-          fen={displayFen}
-          boardOrientation={displayOrientation}
-          squareStyles={boardDisabled ? {} : squareStyles}
-          arrows={bestMoveArrows}
-          onSquareClick={boardDisabled ? () => {} : onSquareClick}
-          onPieceDrop={boardDisabled ? () => false : onPieceDrop}
-          onPieceDragBegin={boardDisabled ? () => {} : onPieceDragBegin}
-        />
+        <div className="relative">
+          <PlayerNameBar
+            name={getNameForColor(topColor)}
+            color={topColor}
+            isActive={turn === topColor}
+            capturedPieces={topColor === "white" ? captured.white : captured.black}
+            isEditable={isEditable(topColor)}
+            onNameChange={handlePlayerNameChange}
+          />
+          <Board
+            fen={displayFen}
+            boardOrientation={displayOrientation}
+            squareStyles={boardDisabled ? {} : squareStyles}
+            arrows={bestMoveArrows}
+            onSquareClick={boardDisabled ? () => {} : onSquareClick}
+            onPieceDrop={boardDisabled ? () => false : onPieceDrop}
+            onPieceDragBegin={boardDisabled ? () => {} : onPieceDragBegin}
+          />
+          <PlayerNameBar
+            name={getNameForColor(bottomColor)}
+            color={bottomColor}
+            isActive={turn === bottomColor}
+            capturedPieces={bottomColor === "white" ? captured.white : captured.black}
+            isEditable={isEditable(bottomColor)}
+            onNameChange={handlePlayerNameChange}
+          />
+
+          {/* Game over overlay on the board */}
+          {(isGameOver || !!timeoutMessage) && !replay.isActive && (
+            <GameOverOverlay
+              status={timeoutMessage || getStatus()}
+              onNewGame={handleNewGame}
+              onReview={moveHistory.length > 0 ? handleReview : undefined}
+            />
+          )}
+        </div>
       </div>
 
       {/* Sidebar */}
@@ -261,6 +329,7 @@ export default function ChessGame() {
           <GameStatus
             status={timeoutMessage || getStatus()}
             isGameOver={isGameOver || !!timeoutMessage}
+            inCheck={inCheck}
           />
         )}
 
@@ -316,9 +385,6 @@ export default function ChessGame() {
             onClose={() => setShowHistory(false)}
           />
         )}
-
-        {/* Captured Pieces */}
-        {!replay.isActive && <CapturedPieces captured={getCapturedPieces()} />}
 
         {/* Move History */}
         <MoveHistory
