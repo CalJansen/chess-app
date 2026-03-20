@@ -1,25 +1,24 @@
 "use client";
 
 /**
- * Analysis toggle controls — enable/disable Stockfish eval bar and best-move arrows.
- * Two independent toggles so the user can use either or both.
+ * Analysis controls — toggle Stockfish eval bar and request a one-shot hint.
  */
 
 import { useTheme } from "@/contexts/ThemeContext";
 
 interface AnalysisToggleProps {
   analysisEnabled: boolean;
-  showArrows: boolean;
   onToggleAnalysis: () => void;
-  onToggleArrows: () => void;
+  onHint: () => void;
+  hintLoading: boolean;
   isAvailable: boolean;
 }
 
 export default function AnalysisToggle({
   analysisEnabled,
-  showArrows,
   onToggleAnalysis,
-  onToggleArrows,
+  onHint,
+  hintLoading,
   isAvailable,
 }: AnalysisToggleProps) {
   const { theme } = useTheme();
@@ -54,20 +53,19 @@ export default function AnalysisToggle({
         {analysisEnabled ? "Eval ON" : "Eval OFF"}
       </button>
 
-      {/* Best Move Arrow toggle — only visible when eval is enabled */}
-      {analysisEnabled && (
-        <button
-          onClick={onToggleArrows}
-          className="px-3 py-2 rounded-lg text-sm font-medium transition-colors"
-          style={{
-            backgroundColor: showArrows ? "#2563eb" : theme.buttonBg,
-            color: showArrows ? "#ffffff" : theme.buttonText,
-          }}
-          title="Toggle best move arrow on the board"
-        >
-          {showArrows ? "Arrow ON" : "Arrow OFF"}
-        </button>
-      )}
+      {/* Hint button — one-shot, fetches best move */}
+      <button
+        onClick={onHint}
+        disabled={hintLoading}
+        className="px-3 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+        style={{
+          backgroundColor: theme.buttonBg,
+          color: theme.buttonText,
+        }}
+        title="Show the best move for the current position"
+      >
+        {hintLoading ? "Thinking..." : "Hint"}
+      </button>
     </div>
   );
 }

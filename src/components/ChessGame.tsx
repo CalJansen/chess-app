@@ -9,6 +9,7 @@ import { useChessClock } from "@/hooks/useChessClock";
 import { useStockfishEval } from "@/hooks/useStockfishEval";
 import { saveCompletedGame } from "@/utils/gameHistory";
 import { findOpening } from "@/utils/openings";
+import { fetchEvaluation } from "@/services/api";
 import { getPlayerName, setPlayerName as persistPlayerName } from "@/utils/playerName";
 import Board from "./Board";
 import GameStatus from "./GameStatus";
@@ -83,10 +84,8 @@ export default function ChessGame() {
     if (typeof window === "undefined") return false;
     return localStorage.getItem("chess-analysis-enabled") === "true";
   });
-  const [showArrows, setShowArrows] = useState(() => {
-    if (typeof window === "undefined") return true;
-    return localStorage.getItem("chess-analysis-arrows") !== "false";
-  });
+  const [hintArrow, setHintArrow] = useState<{ from: string; to: string } | null>(null);
+  const [hintLoading, setHintLoading] = useState(false);
 
   // Player name state
   const [playerName, setPlayerNameState] = useState("Player 1");
@@ -98,13 +97,15 @@ export default function ChessGame() {
     persistPlayerName(name);
   }, []);
 
-  // Persist analysis preferences
+  // Persist analysis preference
   useEffect(() => {
     localStorage.setItem("chess-analysis-enabled", String(analysisEnabled));
   }, [analysisEnabled]);
+
+  // Clear hint arrow when a new move is made
   useEffect(() => {
-    localStorage.setItem("chess-analysis-arrows", String(showArrows));
-  }, [showArrows]);
+    setHintArrow(null);
+  }, [moveHistory.length]);
 
   // Play sound on each move
   useEffect(() => {
@@ -164,7 +165,26 @@ export default function ChessGame() {
     newGame();
     clock.resetClock();
     setGameEndSaved(false);
+    setHintArrow(null);
   }, [newGame, clock]);
+
+  const handleHint = useCallback(async () => {
+    if (hintLoading || isGameOver) return;
+    setHintLoading(true);
+    try {
+      const result = await fetchEvaluation(fen, 16);
+      if (result?.best_move) {
+        setHintArrow({
+          from: result.best_move.slice(0, 2),
+          to: result.best_move.slice(2, 4),
+        });
+      }
+    } catch {
+      // Stockfish unavailable
+    } finally {
+      setHintLoading(false);
+    }
+  }, [fen, hintLoading, isGameOver]);
 
   const handleStartReplay = useCallback(
     (moves: string[], whitePlayer?: string, blackPlayer?: string) => {
@@ -216,17 +236,16 @@ export default function ChessGame() {
     ? findOpening(replay.moves.slice(0, replay.currentIndex + 1))
     : null;
 
-  // Build best-move arrow from Stockfish's recommendation
-  const bestMoveArrows =
-    analysisEnabled && showArrows && evaluation.bestMove
-      ? [
-          {
-            startSquare: evaluation.bestMove.slice(0, 2),
-            endSquare: evaluation.bestMove.slice(2, 4),
-            color: "rgba(0, 180, 80, 0.7)",
-          },
-        ]
-      : [];
+  // Build hint arrow (one-shot from Hint button)
+  const bestMoveArrows = hintArrow
+    ? [
+        {
+          startSquare: hintArrow.from,
+          endSquare: hintArrow.to,
+          color: "rgba(0, 180, 80, 0.7)",
+        },
+      ]
+    : [];
 
   // Derive player names for the board name bars
   const captured = getCapturedPieces();
@@ -368,9 +387,9 @@ export default function ChessGame() {
             />
             <AnalysisToggle
               analysisEnabled={analysisEnabled}
-              showArrows={showArrows}
               onToggleAnalysis={() => setAnalysisEnabled((prev) => !prev)}
-              onToggleArrows={() => setShowArrows((prev) => !prev)}
+              onHint={handleHint}
+              hintLoading={hintLoading}
               isAvailable={evaluation.isAvailable}
             />
             <div className="flex flex-wrap gap-2">
