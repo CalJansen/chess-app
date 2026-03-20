@@ -145,13 +145,20 @@ export default function ChessGame() {
     ? "Black ran out of time! White wins!"
     : null;
 
+  // In AI mode, undo 2 moves (AI + human) so it's the player's turn again
   const handleUndo = useCallback(() => {
     undoMove();
-  }, [undoMove]);
+    if (ai.aiEnabled) {
+      undoMove();
+    }
+  }, [undoMove, ai.aiEnabled]);
 
   const handleRedo = useCallback(() => {
     redoMove();
-  }, [redoMove]);
+    if (ai.aiEnabled) {
+      redoMove();
+    }
+  }, [redoMove, ai.aiEnabled]);
 
   const handleNewGame = useCallback(() => {
     newGame();
@@ -354,7 +361,7 @@ export default function ChessGame() {
               onRedo={handleRedo}
               onFlip={flipBoard}
               onNewGame={handleNewGame}
-              canUndo={moveHistory.length > 0 && !ai.aiThinking}
+              canUndo={moveHistory.length >= (ai.aiEnabled ? 2 : 1) && !ai.aiThinking}
               canRedo={canRedo && !ai.aiThinking}
             />
             <AnalysisToggle
