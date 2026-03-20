@@ -40,9 +40,9 @@ export function useStockfishEval({ fen, enabled }: UseStockfishEvalOptions): Sto
   const abortController = useRef<AbortController | null>(null);
   const availabilityChecked = useRef(false);
 
-  // Check Stockfish availability when first enabled
+  // Check Stockfish availability on mount (eagerly, so the toggle shows correctly)
   useEffect(() => {
-    if (!enabled || availabilityChecked.current) return;
+    if (availabilityChecked.current) return;
 
     let cancelled = false;
     checkStockfishAvailable().then((available) => {
@@ -53,7 +53,7 @@ export function useStockfishEval({ fen, enabled }: UseStockfishEvalOptions): Sto
     });
 
     return () => { cancelled = true; };
-  }, [enabled]);
+  }, []);
 
   // Debounced evaluation
   const evaluate = useCallback(
