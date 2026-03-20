@@ -23,7 +23,7 @@ export default function GameControls({
   const [confirmingNewGame, setConfirmingNewGame] = useState(false);
   const { theme } = useTheme();
 
-  const btnClass = `px-4 py-2 ${theme.buttonBg} ${theme.buttonHover} ${theme.buttonText} rounded-lg text-sm font-medium transition-colors`;
+  const btnClass = `flex-1 py-1.5 ${theme.buttonBg} ${theme.buttonHover} ${theme.buttonText} rounded text-xs font-medium transition-colors`;
   const disabledClass = "disabled:opacity-40 disabled:cursor-not-allowed";
 
   const handleNewGame = () => {
@@ -40,7 +40,7 @@ export default function GameControls({
   };
 
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex gap-2 mt-1.5 w-full">
       <button
         onClick={onUndo}
         disabled={!canUndo}
@@ -59,17 +59,17 @@ export default function GameControls({
         Flip Board
       </button>
       {confirmingNewGame ? (
-        <div className="flex gap-2">
+        <>
           <button
             onClick={handleNewGame}
-            className="px-4 py-2 bg-red-700 hover:bg-red-600 rounded-lg text-sm font-medium transition-colors text-white"
+            className="flex-1 py-1.5 bg-red-700 hover:bg-red-600 rounded text-xs font-medium transition-colors text-white"
           >
-            Confirm Reset
+            Confirm
           </button>
           <button onClick={handleCancel} className={btnClass}>
             Cancel
           </button>
-        </div>
+        </>
       ) : (
         <button onClick={handleNewGame} className={btnClass}>
           New Game

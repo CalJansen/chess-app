@@ -270,9 +270,28 @@ export default function ChessGame() {
   };
 
   return (
-    <div className="flex flex-col lg:flex-row gap-6 p-6 max-w-5xl mx-auto min-h-screen items-center lg:items-start justify-center">
-      {/* Board area: eval bar + player names + board */}
-      <div className="flex-shrink-0 flex flex-row items-stretch">
+    <div className="flex flex-col lg:flex-row gap-6 p-6 max-w-6xl mx-auto min-h-screen items-center lg:items-start justify-center">
+      {/* Left Panel: Opening, Move History, Game Status */}
+      <div className="w-full lg:w-56 flex flex-col gap-3 order-2 lg:order-1">
+        <OpeningLabel opening={replay.isActive ? replayOpening : currentOpening} />
+
+        <MoveHistory
+          history={replay.isActive ? replay.moves : moveHistory}
+          currentMoveIndex={replay.isActive ? replay.currentIndex : undefined}
+          onMoveClick={replay.isActive ? replay.goToMove : undefined}
+        />
+
+        {!replay.isActive && (
+          <GameStatus
+            status={timeoutMessage || getStatus()}
+            isGameOver={isGameOver || !!timeoutMessage}
+            inCheck={inCheck}
+          />
+        )}
+      </div>
+
+      {/* Center: Board area with eval bar + player names */}
+      <div className="flex-shrink-0 flex flex-row items-stretch order-1 lg:order-2">
         {analysisEnabled && (
           <EvalBar
             scoreCp={evaluation.score}
@@ -310,6 +329,29 @@ export default function ChessGame() {
             onNameChange={handlePlayerNameChange}
           />
 
+          {/* Controls below the board */}
+          {replay.isActive ? (
+            <ReplayControls
+              currentIndex={replay.currentIndex}
+              totalMoves={replay.totalMoves}
+              onStepBack={replay.stepBack}
+              onStepForward={replay.stepForward}
+              onGoToStart={replay.goToStart}
+              onGoToEnd={replay.goToEnd}
+              onGoToMove={replay.goToMove}
+              onExit={replay.stopReplay}
+            />
+          ) : (
+            <GameControls
+              onUndo={handleUndo}
+              onRedo={handleRedo}
+              onFlip={flipBoard}
+              onNewGame={handleNewGame}
+              canUndo={moveHistory.length >= (ai.aiEnabled ? 2 : 1) && !ai.aiThinking}
+              canRedo={canRedo && !ai.aiThinking}
+            />
+          )}
+
           {/* Game over overlay on the board */}
           {(isGameOver || !!timeoutMessage) && !replay.isActive && (
             <GameOverOverlay
@@ -321,41 +363,8 @@ export default function ChessGame() {
         </div>
       </div>
 
-      {/* Sidebar */}
-      <div className="w-full lg:w-72 flex flex-col gap-3">
-        {/* === Always Visible: Controls + Status === */}
-        {replay.isActive ? (
-          <ReplayControls
-            currentIndex={replay.currentIndex}
-            totalMoves={replay.totalMoves}
-            onStepBack={replay.stepBack}
-            onStepForward={replay.stepForward}
-            onGoToStart={replay.goToStart}
-            onGoToEnd={replay.goToEnd}
-            onGoToMove={replay.goToMove}
-            onExit={replay.stopReplay}
-          />
-        ) : (
-          <GameControls
-            onUndo={handleUndo}
-            onRedo={handleRedo}
-            onFlip={flipBoard}
-            onNewGame={handleNewGame}
-            canUndo={moveHistory.length >= (ai.aiEnabled ? 2 : 1) && !ai.aiThinking}
-            canRedo={canRedo && !ai.aiThinking}
-          />
-        )}
-
-        <OpeningLabel opening={replay.isActive ? replayOpening : currentOpening} />
-
-        {!replay.isActive && (
-          <GameStatus
-            status={timeoutMessage || getStatus()}
-            isGameOver={isGameOver || !!timeoutMessage}
-            inCheck={inCheck}
-          />
-        )}
-
+      {/* Right Sidebar: Settings + Tools */}
+      <div className="w-full lg:w-72 flex flex-col gap-3 order-3">
         {/* === Game Setup (collapsible) === */}
         {!replay.isActive && (
           <CollapsibleSection title="Game Setup" storageKey="chess-section-setup" defaultOpen={true}>
@@ -418,13 +427,6 @@ export default function ChessGame() {
             onClose={() => setShowHistory(false)}
           />
         )}
-
-        {/* === Always Visible: Move History === */}
-        <MoveHistory
-          history={replay.isActive ? replay.moves : moveHistory}
-          currentMoveIndex={replay.isActive ? replay.currentIndex : undefined}
-          onMoveClick={replay.isActive ? replay.goToMove : undefined}
-        />
       </div>
 
       {/* PGN Modal */}
