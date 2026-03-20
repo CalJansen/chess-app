@@ -8,6 +8,7 @@ interface PlayerNameBarProps {
   color: "white" | "black";
   isActive: boolean;
   capturedPieces: string[];
+  position: "top" | "bottom";
   isEditable?: boolean;
   onNameChange?: (name: string) => void;
 }
@@ -17,6 +18,7 @@ export default function PlayerNameBar({
   color,
   isActive,
   capturedPieces,
+  position,
   isEditable = false,
   onNameChange,
 }: PlayerNameBarProps) {
@@ -53,18 +55,23 @@ export default function PlayerNameBar({
   const dotColor = color === "white" ? "bg-white" : "bg-gray-800";
   const dotBorder = color === "white" ? "border-gray-400" : "border-gray-500";
 
+  // Square corners matching the board edge, rounded only on the outer side
+  const rounding = position === "top" ? "rounded-t-md" : "rounded-b-md";
+
   return (
     <div
-      className={`flex items-center gap-2 px-2 py-1.5 rounded-md transition-all ${
-        isActive
-          ? `${theme.panel} border-l-2 border-l-green-500`
-          : "border-l-2 border-l-transparent"
-      }`}
+      className={`flex items-center gap-2 px-3 py-1.5 ${rounding} transition-all`}
+      style={{ backgroundColor: theme.darkSquare + "30" }}
     >
       {/* Color indicator */}
       <span
         className={`w-3 h-3 rounded-full ${dotColor} border ${dotBorder} flex-shrink-0`}
       />
+
+      {/* Active turn indicator */}
+      {isActive && (
+        <span className="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0 animate-pulse" />
+      )}
 
       {/* Name */}
       {editing ? (
@@ -87,7 +94,7 @@ export default function PlayerNameBar({
             }
           }}
           className={`text-sm font-medium ${
-            isActive ? theme.textPrimary : theme.textSecondary
+            isActive ? theme.textPrimary : theme.textMuted
           } ${isEditable ? "cursor-pointer hover:underline" : ""}`}
           title={isEditable ? "Click to edit name" : undefined}
         >

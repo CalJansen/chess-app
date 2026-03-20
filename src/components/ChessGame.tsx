@@ -267,6 +267,7 @@ export default function ChessGame() {
             color={topColor}
             isActive={turn === topColor}
             capturedPieces={topColor === "white" ? captured.white : captured.black}
+            position="top"
             isEditable={isEditable(topColor)}
             onNameChange={handlePlayerNameChange}
           />
@@ -284,6 +285,7 @@ export default function ChessGame() {
             color={bottomColor}
             isActive={turn === bottomColor}
             capturedPieces={bottomColor === "white" ? captured.white : captured.black}
+            position="bottom"
             isEditable={isEditable(bottomColor)}
             onNameChange={handlePlayerNameChange}
           />
