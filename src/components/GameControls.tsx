@@ -5,16 +5,20 @@ import { useTheme } from "@/contexts/ThemeContext";
 
 interface GameControlsProps {
   onUndo: () => void;
+  onRedo: () => void;
   onFlip: () => void;
   onNewGame: () => void;
   canUndo: boolean;
+  canRedo: boolean;
 }
 
 export default function GameControls({
   onUndo,
+  onRedo,
   onFlip,
   onNewGame,
   canUndo,
+  canRedo,
 }: GameControlsProps) {
   const [confirmingNewGame, setConfirmingNewGame] = useState(false);
   const { theme } = useTheme();
@@ -42,7 +46,14 @@ export default function GameControls({
         disabled={!canUndo}
         className={`${btnClass} ${disabledClass}`}
       >
-        Undo Move
+        Undo
+      </button>
+      <button
+        onClick={onRedo}
+        disabled={!canRedo}
+        className={`${btnClass} ${disabledClass}`}
+      >
+        Redo
       </button>
       <button onClick={onFlip} className={btnClass}>
         Flip Board

@@ -55,6 +55,8 @@ export default function ChessGame() {
     onPieceDragBegin,
     makeMoveFromSAN,
     undoMove,
+    redoMove,
+    canRedo,
     flipBoard,
     newGame,
   } = chessGame;
@@ -143,13 +145,13 @@ export default function ChessGame() {
     ? "Black ran out of time! White wins!"
     : null;
 
-  // Handle undo — in AI mode, undo 2 moves (AI + human)
   const handleUndo = useCallback(() => {
-    const count = ai.aiEnabled ? ai.aiUndoCount : 1;
-    for (let i = 0; i < count; i++) {
-      undoMove();
-    }
-  }, [undoMove, ai.aiEnabled, ai.aiUndoCount]);
+    undoMove();
+  }, [undoMove]);
+
+  const handleRedo = useCallback(() => {
+    redoMove();
+  }, [redoMove]);
 
   const handleNewGame = useCallback(() => {
     newGame();
@@ -349,9 +351,11 @@ export default function ChessGame() {
           <>
             <GameControls
               onUndo={handleUndo}
+              onRedo={handleRedo}
               onFlip={flipBoard}
               onNewGame={handleNewGame}
               canUndo={moveHistory.length > 0 && !ai.aiThinking}
+              canRedo={canRedo && !ai.aiThinking}
             />
             <AnalysisToggle
               analysisEnabled={analysisEnabled}
