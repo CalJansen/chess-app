@@ -3,6 +3,8 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { Chess, Square, Move } from "chess.js";
 import { saveGame, loadGame, clearGame } from "@/utils/storage";
+import { findOpening } from "@/utils/openings";
+import type { MoveType } from "@/hooks/useSoundEffects";
 
 export interface CapturedPieces {
   white: string[];
@@ -24,6 +26,14 @@ const PIECE_UNICODE: Record<string, string> = {
   bk: "\u265A",
 };
 
+function classifyMove(move: Move, game: Chess): MoveType {
+  if (game.isCheckmate() || game.isStalemate() || game.isDraw()) return "game-end";
+  if (game.inCheck()) return "check";
+  if (move.san === "O-O" || move.san === "O-O-O") return "castle";
+  if (move.captured) return "capture";
+  return "move";
+}
+
 export function useChessGame() {
   const gameRef = useRef<Chess>(new Chess());
   const [fen, setFen] = useState<string>(gameRef.current.fen());
@@ -32,6 +42,7 @@ export function useChessGame() {
   const [moveHistory, setMoveHistory] = useState<string[]>([]);
   const [boardOrientation, setBoardOrientation] = useState<"white" | "black">("white");
   const [initialized, setInitialized] = useState(false);
+  const [lastMoveType, setLastMoveType] = useState<MoveType | null>(null);
 
   // Load saved game on mount
   useEffect(() => {
@@ -61,6 +72,7 @@ export function useChessGame() {
     setMoveHistory(game.history());
     setSelectedSquare(null);
     setLegalMoves([]);
+    setBoardOrientation(game.turn() === "w" ? "white" : "black");
   }, [game]);
 
   const getStatus = useCallback((): string => {
@@ -75,6 +87,16 @@ export function useChessGame() {
     const turn = game.turn() === "w" ? "White" : "Black";
     if (game.inCheck()) return `${turn} is in check!`;
     return `${turn} to move`;
+  }, [game]);
+
+  const getGameResult = useCallback((): string => {
+    if (game.isCheckmate()) {
+      return game.turn() === "w" ? "0-1" : "1-0";
+    }
+    if (game.isStalemate() || game.isDraw() || game.isThreefoldRepetition() || game.isInsufficientMaterial()) {
+      return "1/2-1/2";
+    }
+    return "*";
   }, [game]);
 
   const getCapturedPieces = useCallback((): CapturedPieces => {
@@ -106,7 +128,24 @@ export function useChessGame() {
   const makeMove = useCallback(
     (from: string, to: string): boolean => {
       try {
-        game.move({ from: from as Square, to: to as Square, promotion: "q" });
+        const result = game.move({ from: from as Square, to: to as Square, promotion: "q" });
+        const moveType = classifyMove(result, game);
+        setLastMoveType(moveType);
+        syncState();
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [game, syncState]
+  );
+
+  const makeMoveFromSAN = useCallback(
+    (san: string): boolean => {
+      try {
+        const result = game.move(san);
+        const moveType = classifyMove(result, game);
+        setLastMoveType(moveType);
         syncState();
         return true;
       } catch {
@@ -171,6 +210,7 @@ export function useChessGame() {
 
   const undoMove = useCallback(() => {
     game.undo();
+    setLastMoveType(null);
     syncState();
   }, [game, syncState]);
 
@@ -180,11 +220,14 @@ export function useChessGame() {
 
   const newGame = useCallback(() => {
     game.reset();
+    setLastMoveType(null);
     syncState();
     clearGame();
   }, [game, syncState]);
 
+  const turn = game.turn() === "w" ? "white" : "black";
   const isGameOver = game.isGameOver();
+  const currentOpening = findOpening(moveHistory);
 
   // Build square styles for highlights
   const squareStyles: Record<string, React.CSSProperties> = {};
@@ -211,13 +254,18 @@ export function useChessGame() {
     moveHistory,
     boardOrientation,
     squareStyles,
+    turn,
     isGameOver,
+    currentOpening,
+    lastMoveType,
     initialized,
     getStatus,
+    getGameResult,
     getCapturedPieces,
     onSquareClick,
     onPieceDrop,
     onPieceDragBegin,
+    makeMoveFromSAN,
     undoMove,
     flipBoard,
     newGame,

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTheme } from "@/contexts/ThemeContext";
 
 interface GameControlsProps {
   onUndo: () => void;
@@ -16,6 +17,10 @@ export default function GameControls({
   canUndo,
 }: GameControlsProps) {
   const [confirmingNewGame, setConfirmingNewGame] = useState(false);
+  const { theme } = useTheme();
+
+  const btnClass = `px-4 py-2 ${theme.buttonBg} ${theme.buttonHover} ${theme.buttonText} rounded-lg text-sm font-medium transition-colors`;
+  const disabledClass = "disabled:opacity-40 disabled:cursor-not-allowed";
 
   const handleNewGame = () => {
     if (confirmingNewGame) {
@@ -35,36 +40,27 @@ export default function GameControls({
       <button
         onClick={onUndo}
         disabled={!canUndo}
-        className="px-4 py-2 bg-gray-700 hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-sm font-medium transition-colors"
+        className={`${btnClass} ${disabledClass}`}
       >
         Undo Move
       </button>
-      <button
-        onClick={onFlip}
-        className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm font-medium transition-colors"
-      >
+      <button onClick={onFlip} className={btnClass}>
         Flip Board
       </button>
       {confirmingNewGame ? (
         <div className="flex gap-2">
           <button
             onClick={handleNewGame}
-            className="px-4 py-2 bg-red-700 hover:bg-red-600 rounded-lg text-sm font-medium transition-colors"
+            className="px-4 py-2 bg-red-700 hover:bg-red-600 rounded-lg text-sm font-medium transition-colors text-white"
           >
             Confirm Reset
           </button>
-          <button
-            onClick={handleCancel}
-            className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm font-medium transition-colors"
-          >
+          <button onClick={handleCancel} className={btnClass}>
             Cancel
           </button>
         </div>
       ) : (
-        <button
-          onClick={handleNewGame}
-          className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm font-medium transition-colors"
-        >
+        <button onClick={handleNewGame} className={btnClass}>
           New Game
         </button>
       )}

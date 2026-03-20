@@ -1,6 +1,7 @@
 "use client";
 
 import { Chessboard } from "react-chessboard";
+import { useTheme } from "@/contexts/ThemeContext";
 
 interface BoardProps {
   fen: string;
@@ -19,6 +20,8 @@ export default function Board({
   onPieceDrop,
   onPieceDragBegin,
 }: BoardProps) {
+  const { theme } = useTheme();
+
   return (
     <div className="w-full max-w-[560px] aspect-square">
       <Chessboard
@@ -37,8 +40,8 @@ export default function Board({
             if (square) onPieceDragBegin(square);
           },
           animationDurationInMs: 200,
-          darkSquareStyle: { backgroundColor: "#779952" },
-          lightSquareStyle: { backgroundColor: "#edeed1" },
+          darkSquareStyle: { backgroundColor: theme.darkSquare },
+          lightSquareStyle: { backgroundColor: theme.lightSquare },
         }}
       />
     </div>
