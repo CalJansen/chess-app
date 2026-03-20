@@ -17,20 +17,24 @@ import chess.engine
 
 from config import STOCKFISH_DIR
 
+# Resolve STOCKFISH_DIR relative to the backend root (parent of engines/)
+_BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_STOCKFISH_PATH = os.path.join(_BACKEND_DIR, STOCKFISH_DIR)
+
 # ─── Locate and open Stockfish ────────────────────────────────────────────────
 
 _engine: chess.engine.SimpleEngine | None = None
 
 
 def _find_stockfish_binary() -> str | None:
-    """Search the STOCKFISH_DIR for an executable file."""
-    if not os.path.isdir(STOCKFISH_DIR):
+    """Search the _STOCKFISH_PATH for an executable file."""
+    if not os.path.isdir(_STOCKFISH_PATH):
         return None
 
     # Look for .exe files on Windows, or any file on Unix
     patterns = [
-        os.path.join(STOCKFISH_DIR, "*.exe"),
-        os.path.join(STOCKFISH_DIR, "stockfish*"),
+        os.path.join(_STOCKFISH_PATH, "*.exe"),
+        os.path.join(_STOCKFISH_PATH, "stockfish*"),
     ]
     for pattern in patterns:
         matches = glob.glob(pattern)
@@ -45,7 +49,7 @@ def _init_engine() -> None:
 
     binary_path = _find_stockfish_binary()
     if binary_path is None:
-        print("[Stockfish] No binary found in '%s/' -- evaluation disabled" % STOCKFISH_DIR)
+        print("[Stockfish] No binary found in '%s/' -- evaluation disabled" % _STOCKFISH_PATH)
         print("[Stockfish] Download from https://stockfishchess.org/download/")
         return
 
