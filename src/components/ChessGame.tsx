@@ -173,6 +173,13 @@ export default function ChessGame() {
     [replay]
   );
 
+  // Review handler for game-over overlay — must be above early return (Rules of Hooks)
+  const handleReview = useCallback(() => {
+    if (moveHistory.length > 0) {
+      replay.startReplay(moveHistory);
+    }
+  }, [moveHistory, replay]);
+
   // Determine display state (must be above early return so hooks are consistent)
   const displayFen = replay.isActive ? replay.displayFen : fen;
   const displayOrientation = replay.isActive
@@ -232,13 +239,6 @@ export default function ChessGame() {
     if (ai.aiEnabled) return color === ai.playerColor;
     return color === "white"; // Only white player name is editable in PvP
   };
-
-  // Review handler for game-over overlay
-  const handleReview = useCallback(() => {
-    if (moveHistory.length > 0) {
-      replay.startReplay(moveHistory);
-    }
-  }, [moveHistory, replay]);
 
   return (
     <div className="flex flex-col lg:flex-row gap-6 p-6 max-w-5xl mx-auto min-h-screen items-center lg:items-start justify-center">
