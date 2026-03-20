@@ -69,3 +69,64 @@ export async function checkBackendHealth(): Promise<boolean> {
     return false;
   }
 }
+
+// ─── Stockfish Evaluation ─────────────────────────────────────────────────────
+
+export interface EvalResult {
+  score_cp: number;        // Centipawns from White's perspective
+  mate_in: number | null;  // Moves to mate (null if none)
+  best_move: string | null; // Best move in UCI (e.g., "e2e4")
+  pv: string[];            // Principal variation
+}
+
+/**
+ * Fetch Stockfish evaluation for a position.
+ * Returns null if Stockfish is unavailable (503).
+ */
+export async function fetchEvaluation(
+  fen: string,
+  depth: number = 18,
+  signal?: AbortSignal
+): Promise<EvalResult | null> {
+  try {
+    const res = await fetch(`${API_BASE}/evaluate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fen, depth }),
+      signal,
+    });
+
+    if (res.status === 503) {
+      // Stockfish not installed
+      return null;
+    }
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.detail || `Eval error: ${res.status}`);
+    }
+
+    return await res.json();
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      return null; // Request was cancelled, not an error
+    }
+    throw err;
+  }
+}
+
+/**
+ * Check if Stockfish is available on the backend.
+ */
+export async function checkStockfishAvailable(): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE}/evaluate/status`, {
+      signal: AbortSignal.timeout(3000),
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    return data.available === true;
+  } catch {
+    return false;
+  }
+}

@@ -58,6 +58,23 @@ curl http://localhost:8000/api/health
 curl http://localhost:8000/api/models
 ```
 
+### Stockfish Analysis (Optional)
+
+Download Stockfish to enable the evaluation bar and best-move arrows.
+
+1. Go to [stockfishchess.org/download](https://stockfishchess.org/download/)
+2. Download the Windows binary (`.zip` file)
+3. Extract and place the `.exe` in `backend/stockfish/`
+4. Restart the backend — Stockfish is auto-detected at startup
+
+```bash
+# Verify Stockfish is loaded
+curl http://localhost:8000/api/evaluate/status
+
+# Evaluate a position
+curl -X POST http://localhost:8000/api/evaluate -H "Content-Type: application/json" -d "{\"fen\":\"rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\"}"
+```
+
 ### Training Pipeline
 
 Train a neural network to evaluate chess positions using games from the Lichess open database.

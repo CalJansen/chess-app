@@ -3,10 +3,17 @@
 import { Chessboard } from "react-chessboard";
 import { useTheme } from "@/contexts/ThemeContext";
 
+interface BoardArrow {
+  startSquare: string;
+  endSquare: string;
+  color: string;
+}
+
 interface BoardProps {
   fen: string;
   boardOrientation: "white" | "black";
   squareStyles: Record<string, React.CSSProperties>;
+  arrows?: BoardArrow[];
   onSquareClick: (square: string, piece: string | null) => void;
   onPieceDrop: (sourceSquare: string, targetSquare: string) => boolean;
   onPieceDragBegin: (square: string) => void;
@@ -16,6 +23,7 @@ export default function Board({
   fen,
   boardOrientation,
   squareStyles,
+  arrows = [],
   onSquareClick,
   onPieceDrop,
   onPieceDragBegin,
@@ -39,6 +47,7 @@ export default function Board({
           onPieceDrag: ({ square }) => {
             if (square) onPieceDragBegin(square);
           },
+          arrows: arrows.length > 0 ? arrows : undefined,
           animationDurationInMs: 200,
           darkSquareStyle: { backgroundColor: theme.darkSquare },
           lightSquareStyle: { backgroundColor: theme.lightSquare },

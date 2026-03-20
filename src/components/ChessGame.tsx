@@ -6,6 +6,7 @@ import { useAIGame } from "@/hooks/useAIGame";
 import { useReplayMode } from "@/hooks/useReplayMode";
 import { useSoundEffects } from "@/hooks/useSoundEffects";
 import { useChessClock } from "@/hooks/useChessClock";
+import { useStockfishEval } from "@/hooks/useStockfishEval";
 import { saveCompletedGame } from "@/utils/gameHistory";
 import { findOpening } from "@/utils/openings";
 import Board from "./Board";
@@ -21,6 +22,8 @@ import GameHistoryPanel from "./GameHistoryPanel";
 import PGNModal from "./PGNModal";
 import SoundToggle from "./SoundToggle";
 import ChessClock from "./ChessClock";
+import EvalBar from "./EvalBar";
+import AnalysisToggle from "./AnalysisToggle";
 
 export default function ChessGame() {
   // AI state needs to be declared before useChessGame so we can pass autoFlip option
@@ -69,6 +72,24 @@ export default function ChessGame() {
   const [showHistory, setShowHistory] = useState(false);
   const [showPGN, setShowPGN] = useState(false);
   const [gameEndSaved, setGameEndSaved] = useState(false);
+
+  // Analysis state — persisted to localStorage
+  const [analysisEnabled, setAnalysisEnabled] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("chess-analysis-enabled") === "true";
+  });
+  const [showArrows, setShowArrows] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return localStorage.getItem("chess-analysis-arrows") !== "false";
+  });
+
+  // Persist analysis preferences
+  useEffect(() => {
+    localStorage.setItem("chess-analysis-enabled", String(analysisEnabled));
+  }, [analysisEnabled]);
+  useEffect(() => {
+    localStorage.setItem("chess-analysis-arrows", String(showArrows));
+  }, [showArrows]);
 
   // Play sound on each move
   useEffect(() => {
@@ -139,6 +160,17 @@ export default function ChessGame() {
     [replay]
   );
 
+  // Determine display state (must be above early return so hooks are consistent)
+  const displayFen = replay.isActive ? replay.displayFen : fen;
+  const displayOrientation = replay.isActive
+    ? "white"
+    : ai.aiEnabled
+    ? ai.playerColor
+    : boardOrientation;
+
+  // Stockfish evaluation — must be called before any early returns (Rules of Hooks)
+  const evaluation = useStockfishEval({ fen: displayFen, enabled: analysisEnabled });
+
   if (!initialized) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -151,25 +183,39 @@ export default function ChessGame() {
   const isAITurn = ai.aiEnabled && turn !== ai.playerColor;
   const boardDisabled = replay.isActive || isAITurn || ai.aiThinking;
 
-  // Determine display state
-  const displayFen = replay.isActive ? replay.displayFen : fen;
-  const displayOrientation = replay.isActive
-    ? "white"
-    : ai.aiEnabled
-    ? ai.playerColor
-    : boardOrientation;
   const replayOpening = replay.isActive
     ? findOpening(replay.moves.slice(0, replay.currentIndex + 1))
     : null;
 
+  // Build best-move arrow from Stockfish's recommendation
+  const bestMoveArrows =
+    analysisEnabled && showArrows && evaluation.bestMove
+      ? [
+          {
+            startSquare: evaluation.bestMove.slice(0, 2),
+            endSquare: evaluation.bestMove.slice(2, 4),
+            color: "rgba(0, 180, 80, 0.7)",
+          },
+        ]
+      : [];
+
   return (
     <div className="flex flex-col lg:flex-row gap-6 p-6 max-w-5xl mx-auto min-h-screen items-center lg:items-start justify-center">
-      {/* Board */}
-      <div className="flex-shrink-0">
+      {/* Board area: eval bar + board */}
+      <div className="flex-shrink-0 flex flex-row items-stretch">
+        {analysisEnabled && (
+          <EvalBar
+            scoreCp={evaluation.score}
+            mateIn={evaluation.mateIn}
+            isLoading={evaluation.isLoading}
+            boardOrientation={displayOrientation}
+          />
+        )}
         <Board
           fen={displayFen}
           boardOrientation={displayOrientation}
           squareStyles={boardDisabled ? {} : squareStyles}
+          arrows={bestMoveArrows}
           onSquareClick={boardDisabled ? () => {} : onSquareClick}
           onPieceDrop={boardDisabled ? () => false : onPieceDrop}
           onPieceDragBegin={boardDisabled ? () => {} : onPieceDragBegin}
@@ -237,6 +283,13 @@ export default function ChessGame() {
               onFlip={flipBoard}
               onNewGame={handleNewGame}
               canUndo={moveHistory.length > 0 && !ai.aiThinking}
+            />
+            <AnalysisToggle
+              analysisEnabled={analysisEnabled}
+              showArrows={showArrows}
+              onToggleAnalysis={() => setAnalysisEnabled((prev) => !prev)}
+              onToggleArrows={() => setShowArrows((prev) => !prev)}
+              isAvailable={evaluation.isAvailable}
             />
             <div className="flex flex-wrap gap-2">
               <SoundToggle muted={sound.muted} onToggle={sound.toggleMute} />

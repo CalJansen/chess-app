@@ -14,7 +14,7 @@ from engines.material_engine import MaterialEngine
 from engines.minimax_engine import MinimaxEngine
 from engines.mcts_engine import MCTSEngine
 from engines.nn_engine import discover_models
-from routers import moves, models
+from routers import moves, models, evaluate
 
 # ─── Create the FastAPI app ───────────────────────────────────────────────────
 
@@ -69,10 +69,25 @@ models.engine_registry = engine_registry
 
 app.include_router(moves.router, prefix="/api")
 app.include_router(models.router, prefix="/api")
+app.include_router(evaluate.router, prefix="/api")
 
 
 # ─── Health check ─────────────────────────────────────────────────────────────
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "engines": len(engine_registry)}
+    from engines.stockfish_eval import is_available as sf_available
+    return {
+        "status": "ok",
+        "engines": len(engine_registry),
+        "stockfish": sf_available(),
+    }
+
+
+# ─── Shutdown ─────────────────────────────────────────────────────────────────
+
+@app.on_event("shutdown")
+async def shutdown():
+    """Cleanly close external engine processes."""
+    from engines.stockfish_eval import shutdown as sf_shutdown
+    sf_shutdown()
