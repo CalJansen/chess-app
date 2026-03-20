@@ -27,6 +27,7 @@ import ChessClock from "./ChessClock";
 import EvalBar from "./EvalBar";
 import AnalysisToggle from "./AnalysisToggle";
 import GameOverOverlay from "./GameOverOverlay";
+import CollapsibleSection from "./CollapsibleSection";
 
 export default function ChessGame() {
   // AI state needs to be declared before useChessGame so we can pass autoFlip option
@@ -321,49 +322,8 @@ export default function ChessGame() {
       </div>
 
       {/* Sidebar */}
-      <div className="w-full lg:w-72 flex flex-col gap-4">
-        <ThemeSelector />
-
-        {/* AI Mode Selector */}
-        {!replay.isActive && (
-          <GameModeSelector
-            aiEnabled={ai.aiEnabled}
-            aiThinking={ai.aiThinking}
-            selectedEngine={ai.selectedEngine}
-            playerColor={ai.playerColor}
-            availableModels={ai.availableModels}
-            backendOnline={ai.backendOnline}
-            error={ai.error}
-            onToggleAI={ai.toggleAI}
-            onSetEngine={ai.setEngine}
-            onSetColor={ai.setColor}
-          />
-        )}
-
-        <OpeningLabel opening={replay.isActive ? replayOpening : currentOpening} />
-
-        {/* Clock */}
-        {!replay.isActive && (
-          <ChessClock
-            whiteTime={clock.whiteTime}
-            blackTime={clock.blackTime}
-            activeColor={clock.activeColor}
-            isEnabled={clock.isEnabled}
-            timeControl={clock.timeControl}
-            onSetTimeControl={clock.setTimeControl}
-          />
-        )}
-
-        {/* Status */}
-        {!replay.isActive && (
-          <GameStatus
-            status={timeoutMessage || getStatus()}
-            isGameOver={isGameOver || !!timeoutMessage}
-            inCheck={inCheck}
-          />
-        )}
-
-        {/* Controls area */}
+      <div className="w-full lg:w-72 flex flex-col gap-3">
+        {/* === Always Visible: Controls + Status === */}
         {replay.isActive ? (
           <ReplayControls
             currentIndex={replay.currentIndex}
@@ -376,15 +336,55 @@ export default function ChessGame() {
             onExit={replay.stopReplay}
           />
         ) : (
-          <>
-            <GameControls
-              onUndo={handleUndo}
-              onRedo={handleRedo}
-              onFlip={flipBoard}
-              onNewGame={handleNewGame}
-              canUndo={moveHistory.length >= (ai.aiEnabled ? 2 : 1) && !ai.aiThinking}
-              canRedo={canRedo && !ai.aiThinking}
+          <GameControls
+            onUndo={handleUndo}
+            onRedo={handleRedo}
+            onFlip={flipBoard}
+            onNewGame={handleNewGame}
+            canUndo={moveHistory.length >= (ai.aiEnabled ? 2 : 1) && !ai.aiThinking}
+            canRedo={canRedo && !ai.aiThinking}
+          />
+        )}
+
+        <OpeningLabel opening={replay.isActive ? replayOpening : currentOpening} />
+
+        {!replay.isActive && (
+          <GameStatus
+            status={timeoutMessage || getStatus()}
+            isGameOver={isGameOver || !!timeoutMessage}
+            inCheck={inCheck}
+          />
+        )}
+
+        {/* === Game Setup (collapsible) === */}
+        {!replay.isActive && (
+          <CollapsibleSection title="Game Setup" storageKey="chess-section-setup" defaultOpen={true}>
+            <GameModeSelector
+              aiEnabled={ai.aiEnabled}
+              aiThinking={ai.aiThinking}
+              selectedEngine={ai.selectedEngine}
+              playerColor={ai.playerColor}
+              availableModels={ai.availableModels}
+              backendOnline={ai.backendOnline}
+              error={ai.error}
+              onToggleAI={ai.toggleAI}
+              onSetEngine={ai.setEngine}
+              onSetColor={ai.setColor}
             />
+            <ChessClock
+              whiteTime={clock.whiteTime}
+              blackTime={clock.blackTime}
+              activeColor={clock.activeColor}
+              isEnabled={clock.isEnabled}
+              timeControl={clock.timeControl}
+              onSetTimeControl={clock.setTimeControl}
+            />
+          </CollapsibleSection>
+        )}
+
+        {/* === Tools (collapsible) === */}
+        {!replay.isActive && (
+          <CollapsibleSection title="Tools" storageKey="chess-section-tools" defaultOpen={true}>
             <AnalysisToggle
               analysisEnabled={analysisEnabled}
               onToggleAnalysis={() => setAnalysisEnabled((prev) => !prev)}
@@ -398,7 +398,7 @@ export default function ChessGame() {
                 onClick={() => setShowHistory(true)}
                 className="px-3 py-2 bg-blue-700 hover:bg-blue-600 text-white rounded-lg text-sm font-medium transition-colors"
               >
-                Game History
+                History
               </button>
               <button
                 onClick={() => setShowPGN(true)}
@@ -407,7 +407,8 @@ export default function ChessGame() {
                 PGN
               </button>
             </div>
-          </>
+            <ThemeSelector />
+          </CollapsibleSection>
         )}
 
         {/* Game History Panel */}
@@ -418,7 +419,7 @@ export default function ChessGame() {
           />
         )}
 
-        {/* Move History */}
+        {/* === Always Visible: Move History === */}
         <MoveHistory
           history={replay.isActive ? replay.moves : moveHistory}
           currentMoveIndex={replay.isActive ? replay.currentIndex : undefined}
