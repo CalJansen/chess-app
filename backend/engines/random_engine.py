@@ -21,7 +21,7 @@ class RandomEngine(ChessEngine):
 
     @property
     def description(self) -> str:
-        return "Random moves — picks any legal move at random. The simplest baseline."
+        return "Random moves -- picks any legal move at random. The simplest baseline."
 
     def select_move(self, board: chess.Board) -> chess.Move:
         legal_moves = list(board.legal_moves)

@@ -10,6 +10,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import ALLOWED_ORIGINS
 from engines.random_engine import RandomEngine
+from engines.material_engine import MaterialEngine
+from engines.minimax_engine import MinimaxEngine
+from engines.mcts_engine import MCTSEngine
 from routers import moves, models
 
 # ─── Create the FastAPI app ───────────────────────────────────────────────────
@@ -45,6 +48,10 @@ def register_engine(engine):
 # Register built-in engines
 print("Registering chess engines...")
 register_engine(RandomEngine())
+register_engine(MaterialEngine())
+register_engine(MinimaxEngine(depth=3))
+register_engine(MinimaxEngine(depth=5))
+register_engine(MCTSEngine(simulations=800))
 print(f"Total engines: {len(engine_registry)}\n")
 
 # Share the registry with routers
