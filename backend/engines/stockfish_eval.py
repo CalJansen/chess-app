@@ -75,10 +75,16 @@ class StockfishProcess:
         """
         Evaluate a position. Thread-safe.
 
-        Returns dict with score_cp, mate_in, best_move, pv.
+        Returns dict with score_cp and mate_in always from WHITE's perspective
+        (positive = White is better, negative = Black is better).
+        Stockfish reports scores from the side-to-move's perspective,
+        so we negate when Black is to move.
         """
         with self._lock:
             try:
+                # Determine whose turn it is (FEN field 2: "w" or "b")
+                black_to_move = " b " in fen
+
                 # Set up position
                 self._send("position fen %s" % fen)
 
@@ -115,6 +121,13 @@ class StockfishProcess:
                 if best_info_line:
                     score_cp, mate_in = self._parse_score(best_info_line)
                     pv = self._parse_pv(best_info_line)
+
+                # Normalize to White's perspective:
+                # Stockfish reports from side-to-move, so negate for Black
+                if black_to_move:
+                    score_cp = -score_cp
+                    if mate_in is not None:
+                        mate_in = -mate_in
 
                 return {
                     "score_cp": score_cp,
