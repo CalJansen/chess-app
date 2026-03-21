@@ -214,7 +214,9 @@ export interface ReviewResult {
 
 /**
  * Request a full game review (Stockfish analysis of every move).
- * This can take 10-60 seconds depending on game length and depth.
+ * This can take 30-120 seconds depending on game length and depth.
+ * Calls the backend directly (not through the Next.js proxy) to avoid
+ * the proxy's default timeout which is too short for long analyses.
  */
 export async function fetchGameReview(
   moves: string[],
@@ -222,12 +224,11 @@ export async function fetchGameReview(
   signal?: AbortSignal
 ): Promise<ReviewResult | null> {
   try {
-    const res = await fetch(`${API_BASE}/review`, {
+    const res = await fetch(`http://localhost:8000/api/review`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ moves, depth }),
       signal,
-      // Long timeout — analysis takes time
     });
 
     if (res.status === 503) return null; // Stockfish not available
