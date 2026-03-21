@@ -9,10 +9,12 @@ interface ReplayState {
   displayFen: string;
   isActive: boolean;
   totalMoves: number;
+  whitePlayer: string;
+  blackPlayer: string;
 }
 
 interface ReplayActions {
-  startReplay: (moves: string[]) => void;
+  startReplay: (moves: string[], whitePlayer?: string, blackPlayer?: string) => void;
   stopReplay: () => void;
   goToMove: (index: number) => void;
   stepForward: () => void;
@@ -25,6 +27,8 @@ export function useReplayMode(): ReplayState & ReplayActions {
   const [moves, setMoves] = useState<string[]>([]);
   const [currentIndex, setCurrentIndex] = useState(-1);
   const [isActive, setIsActive] = useState(false);
+  const [whitePlayer, setWhitePlayer] = useState("White");
+  const [blackPlayer, setBlackPlayer] = useState("Black");
 
   // Compute FEN at the current index
   const displayFen = useMemo(() => {
@@ -40,10 +44,12 @@ export function useReplayMode(): ReplayState & ReplayActions {
     return game.fen();
   }, [moves, currentIndex]);
 
-  const startReplay = useCallback((replayMoves: string[]) => {
+  const startReplay = useCallback((replayMoves: string[], white?: string, black?: string) => {
     setMoves(replayMoves);
     setCurrentIndex(-1);
     setIsActive(true);
+    setWhitePlayer(white || "White");
+    setBlackPlayer(black || "Black");
   }, []);
 
   const stopReplay = useCallback(() => {
@@ -81,6 +87,8 @@ export function useReplayMode(): ReplayState & ReplayActions {
     displayFen,
     isActive,
     totalMoves: moves.length,
+    whitePlayer,
+    blackPlayer,
     startReplay,
     stopReplay,
     goToMove,

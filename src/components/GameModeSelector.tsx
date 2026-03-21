@@ -59,23 +59,30 @@ export default function GameModeSelector({
           )}
 
           {/* Engine selector */}
-          <div className="flex items-center gap-2">
-            <span className={`text-xs ${theme.textMuted}`}>Engine:</span>
-            <select
-              value={selectedEngine}
-              onChange={(e) => onSetEngine(e.target.value)}
-              className={`flex-1 text-xs ${theme.panel} ${theme.textSecondary} rounded px-2 py-1 border ${theme.panelBorder}`}
-            >
-              {availableModels.length > 0 ? (
-                availableModels.map((m) => (
-                  <option key={m.name} value={m.name}>
-                    {m.name} — {m.description.slice(0, 50)}
-                  </option>
-                ))
-              ) : (
-                <option value="random">random</option>
-              )}
-            </select>
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className={`text-xs ${theme.textMuted}`}>Engine:</span>
+              <select
+                value={selectedEngine}
+                onChange={(e) => onSetEngine(e.target.value)}
+                className={`flex-1 text-xs ${theme.panel} ${theme.textSecondary} rounded px-2 py-1 border ${theme.panelBorder}`}
+              >
+                {availableModels.length > 0 ? (
+                  availableModels.map((m) => (
+                    <option key={m.name} value={m.name}>
+                      {m.name}
+                    </option>
+                  ))
+                ) : (
+                  <option value="random">random</option>
+                )}
+              </select>
+            </div>
+            {availableModels.length > 0 && (
+              <p className={`text-xs ${theme.textMuted} pl-1 italic`}>
+                {availableModels.find((m) => m.name === selectedEngine)?.description || ""}
+              </p>
+            )}
           </div>
 
           {/* Play as */}

@@ -44,6 +44,7 @@ export function useChessGame(options?: { autoFlip?: boolean }) {
   const [boardOrientation, setBoardOrientation] = useState<"white" | "black">("white");
   const [initialized, setInitialized] = useState(false);
   const [lastMoveType, setLastMoveType] = useState<MoveType | null>(null);
+  const [redoStack, setRedoStack] = useState<string[]>([]);
 
   // Load saved game on mount
   useEffect(() => {
@@ -134,6 +135,7 @@ export function useChessGame(options?: { autoFlip?: boolean }) {
         const result = game.move({ from: from as Square, to: to as Square, promotion: "q" });
         const moveType = classifyMove(result, game);
         setLastMoveType(moveType);
+        setRedoStack([]);
         syncState();
         return true;
       } catch {
@@ -149,6 +151,7 @@ export function useChessGame(options?: { autoFlip?: boolean }) {
         const result = game.move(san);
         const moveType = classifyMove(result, game);
         setLastMoveType(moveType);
+        setRedoStack([]);
         syncState();
         return true;
       } catch {
@@ -212,10 +215,27 @@ export function useChessGame(options?: { autoFlip?: boolean }) {
   );
 
   const undoMove = useCallback(() => {
-    game.undo();
+    const move = game.undo();
+    if (move) {
+      setRedoStack((prev) => [move.san, ...prev]);
+    }
     setLastMoveType(null);
     syncState();
   }, [game, syncState]);
+
+  const redoMove = useCallback(() => {
+    if (redoStack.length === 0) return;
+    const [nextSan, ...rest] = redoStack;
+    try {
+      const result = game.move(nextSan);
+      const moveType = classifyMove(result, game);
+      setLastMoveType(moveType);
+      setRedoStack(rest);
+      syncState();
+    } catch {
+      setRedoStack([]);
+    }
+  }, [game, redoStack, syncState]);
 
   const flipBoard = useCallback(() => {
     setBoardOrientation((prev) => (prev === "white" ? "black" : "white"));
@@ -224,6 +244,7 @@ export function useChessGame(options?: { autoFlip?: boolean }) {
   const newGame = useCallback(() => {
     game.reset();
     setLastMoveType(null);
+    setRedoStack([]);
     syncState();
     clearGame();
   }, [game, syncState]);
@@ -232,8 +253,31 @@ export function useChessGame(options?: { autoFlip?: boolean }) {
   const isGameOver = game.isGameOver();
   const currentOpening = findOpening(moveHistory);
 
+  // Find checked king's square for highlight
+  const checkedKingSquare: string | null = (() => {
+    if (!game.inCheck()) return null;
+    const board = game.board();
+    const kingColor = game.turn();
+    for (let row = 0; row < 8; row++) {
+      for (let col = 0; col < 8; col++) {
+        const piece = board[row][col];
+        if (piece && piece.type === "k" && piece.color === kingColor) {
+          const file = String.fromCharCode(97 + col);
+          const rank = String(8 - row);
+          return `${file}${rank}`;
+        }
+      }
+    }
+    return null;
+  })();
+
   // Build square styles for highlights
   const squareStyles: Record<string, React.CSSProperties> = {};
+  if (checkedKingSquare) {
+    squareStyles[checkedKingSquare] = {
+      background: "radial-gradient(circle, rgba(255, 0, 0, 0.6) 0%, rgba(255, 0, 0, 0.3) 50%, rgba(255, 0, 0, 0) 70%)",
+    };
+  }
   if (selectedSquare) {
     squareStyles[selectedSquare] = { backgroundColor: "rgba(255, 255, 0, 0.4)" };
   }
@@ -259,6 +303,7 @@ export function useChessGame(options?: { autoFlip?: boolean }) {
     squareStyles,
     turn,
     isGameOver,
+    inCheck: game.inCheck(),
     currentOpening,
     lastMoveType,
     initialized,
@@ -270,6 +315,8 @@ export function useChessGame(options?: { autoFlip?: boolean }) {
     onPieceDragBegin,
     makeMoveFromSAN,
     undoMove,
+    redoMove,
+    canRedo: redoStack.length > 0,
     flipBoard,
     newGame,
   };

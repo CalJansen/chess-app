@@ -5,23 +5,28 @@ import { useTheme } from "@/contexts/ThemeContext";
 interface GameStatusProps {
   status: string;
   isGameOver: boolean;
+  inCheck?: boolean;
 }
 
-export default function GameStatus({ status, isGameOver }: GameStatusProps) {
+export default function GameStatus({ status, isGameOver, inCheck }: GameStatusProps) {
   const { theme } = useTheme();
 
-  // Game over and check states keep their semantic colors regardless of theme
-  const statusClasses = isGameOver
-    ? "bg-red-900/50 text-red-200 border border-red-700"
-    : status.includes("check")
-    ? "bg-yellow-900/50 text-yellow-200 border border-yellow-700"
-    : `${theme.statusDefault} ${theme.statusDefaultText} border ${theme.statusDefaultBorder}`;
+  // Game over is handled by the overlay — don't show status bar
+  if (isGameOver) return null;
+
+  // Check: animated toast styling for the content
+  const contentClass = inCheck
+    ? "text-center text-sm font-semibold px-3 py-2 rounded-lg bg-yellow-900/60 text-yellow-200 border border-yellow-600 animate-[slideIn_0.3s_ease-out]"
+    : `text-center text-sm px-3 py-2 rounded-lg ${theme.panel} ${theme.textSecondary}`;
 
   return (
-    <div
-      className={`text-center text-lg font-semibold px-4 py-3 rounded-lg ${statusClasses}`}
-    >
-      {status}
+    <div>
+      <h3 className={`text-sm font-semibold ${theme.textMuted} uppercase tracking-wide mb-2`}>
+        Game Status
+      </h3>
+      <div className={contentClass}>
+        {status}
+      </div>
     </div>
   );
 }

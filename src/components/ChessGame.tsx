@@ -9,11 +9,13 @@ import { useChessClock } from "@/hooks/useChessClock";
 import { useStockfishEval } from "@/hooks/useStockfishEval";
 import { saveCompletedGame } from "@/utils/gameHistory";
 import { findOpening } from "@/utils/openings";
+import { fetchEvaluation } from "@/services/api";
+import { getPlayerName, setPlayerName as persistPlayerName } from "@/utils/playerName";
 import Board from "./Board";
 import GameStatus from "./GameStatus";
 import GameControls from "./GameControls";
 import MoveHistory from "./MoveHistory";
-import CapturedPieces from "./CapturedPieces";
+import PlayerNameBar from "./PlayerNameBar";
 import ThemeSelector from "./ThemeSelector";
 import OpeningLabel from "./OpeningLabel";
 import GameModeSelector from "./GameModeSelector";
@@ -24,6 +26,8 @@ import SoundToggle from "./SoundToggle";
 import ChessClock from "./ChessClock";
 import EvalBar from "./EvalBar";
 import AnalysisToggle from "./AnalysisToggle";
+import GameOverOverlay from "./GameOverOverlay";
+import CollapsibleSection from "./CollapsibleSection";
 
 export default function ChessGame() {
   // AI state needs to be declared before useChessGame so we can pass autoFlip option
@@ -41,6 +45,7 @@ export default function ChessGame() {
     moveHistory,
     turn,
     isGameOver,
+    inCheck,
     currentOpening,
     lastMoveType,
     initialized,
@@ -52,6 +57,8 @@ export default function ChessGame() {
     onPieceDragBegin,
     makeMoveFromSAN,
     undoMove,
+    redoMove,
+    canRedo,
     flipBoard,
     newGame,
   } = chessGame;
@@ -78,18 +85,28 @@ export default function ChessGame() {
     if (typeof window === "undefined") return false;
     return localStorage.getItem("chess-analysis-enabled") === "true";
   });
-  const [showArrows, setShowArrows] = useState(() => {
-    if (typeof window === "undefined") return true;
-    return localStorage.getItem("chess-analysis-arrows") !== "false";
-  });
+  const [hintArrow, setHintArrow] = useState<{ from: string; to: string } | null>(null);
+  const [hintLoading, setHintLoading] = useState(false);
 
-  // Persist analysis preferences
+  // Player name state
+  const [playerName, setPlayerNameState] = useState("Player 1");
+  useEffect(() => {
+    setPlayerNameState(getPlayerName());
+  }, []);
+  const handlePlayerNameChange = useCallback((name: string) => {
+    setPlayerNameState(name);
+    persistPlayerName(name);
+  }, []);
+
+  // Persist analysis preference
   useEffect(() => {
     localStorage.setItem("chess-analysis-enabled", String(analysisEnabled));
   }, [analysisEnabled]);
+
+  // Clear hint arrow when a new move is made
   useEffect(() => {
-    localStorage.setItem("chess-analysis-arrows", String(showArrows));
-  }, [showArrows]);
+    setHintArrow(null);
+  }, [moveHistory.length]);
 
   // Play sound on each move
   useEffect(() => {
@@ -116,8 +133,8 @@ export default function ChessGame() {
         moves: moveHistory,
         result: getGameResult(),
         opening,
-        whitePlayer: ai.aiEnabled && ai.playerColor === "black" ? "AI" : "Player 1",
-        blackPlayer: ai.aiEnabled && ai.playerColor === "white" ? "AI" : "Player 2",
+        whitePlayer: ai.aiEnabled && ai.playerColor === "black" ? ai.selectedEngine : playerName,
+        blackPlayer: ai.aiEnabled && ai.playerColor === "white" ? ai.selectedEngine : (ai.aiEnabled ? playerName : "Player 2"),
       });
       setGameEndSaved(true);
     }
@@ -130,23 +147,49 @@ export default function ChessGame() {
     ? "Black ran out of time! White wins!"
     : null;
 
-  // Handle undo — in AI mode, undo 2 moves (AI + human)
+  // In AI mode, undo 2 moves (AI + human) so it's the player's turn again
   const handleUndo = useCallback(() => {
-    const count = ai.aiEnabled ? ai.aiUndoCount : 1;
-    for (let i = 0; i < count; i++) {
+    undoMove();
+    if (ai.aiEnabled) {
       undoMove();
     }
-  }, [undoMove, ai.aiEnabled, ai.aiUndoCount]);
+  }, [undoMove, ai.aiEnabled]);
+
+  const handleRedo = useCallback(() => {
+    redoMove();
+    if (ai.aiEnabled) {
+      redoMove();
+    }
+  }, [redoMove, ai.aiEnabled]);
 
   const handleNewGame = useCallback(() => {
     newGame();
     clock.resetClock();
     setGameEndSaved(false);
+    setHintArrow(null);
   }, [newGame, clock]);
 
+  const handleHint = useCallback(async () => {
+    if (hintLoading || isGameOver) return;
+    setHintLoading(true);
+    try {
+      const result = await fetchEvaluation(fen, 16);
+      if (result?.best_move) {
+        setHintArrow({
+          from: result.best_move.slice(0, 2),
+          to: result.best_move.slice(2, 4),
+        });
+      }
+    } catch {
+      // Stockfish unavailable
+    } finally {
+      setHintLoading(false);
+    }
+  }, [fen, hintLoading, isGameOver]);
+
   const handleStartReplay = useCallback(
-    (moves: string[]) => {
-      replay.startReplay(moves);
+    (moves: string[], whitePlayer?: string, blackPlayer?: string) => {
+      replay.startReplay(moves, whitePlayer, blackPlayer);
       setShowHistory(false);
     },
     [replay]
@@ -159,6 +202,13 @@ export default function ChessGame() {
     },
     [replay]
   );
+
+  // Review handler for game-over overlay — must be above early return (Rules of Hooks)
+  const handleReview = useCallback(() => {
+    if (moveHistory.length > 0) {
+      replay.startReplay(moveHistory);
+    }
+  }, [moveHistory, replay]);
 
   // Determine display state (must be above early return so hooks are consistent)
   const displayFen = replay.isActive ? replay.displayFen : fen;
@@ -187,22 +237,61 @@ export default function ChessGame() {
     ? findOpening(replay.moves.slice(0, replay.currentIndex + 1))
     : null;
 
-  // Build best-move arrow from Stockfish's recommendation
-  const bestMoveArrows =
-    analysisEnabled && showArrows && evaluation.bestMove
-      ? [
-          {
-            startSquare: evaluation.bestMove.slice(0, 2),
-            endSquare: evaluation.bestMove.slice(2, 4),
-            color: "rgba(0, 180, 80, 0.7)",
-          },
-        ]
-      : [];
+  // Build hint arrow (one-shot from Hint button)
+  const bestMoveArrows = hintArrow
+    ? [
+        {
+          startSquare: hintArrow.from,
+          endSquare: hintArrow.to,
+          color: "rgba(0, 180, 80, 0.7)",
+        },
+      ]
+    : [];
+
+  // Derive player names for the board name bars
+  const captured = getCapturedPieces();
+  const bottomColor = displayOrientation;
+  const topColor = displayOrientation === "white" ? "black" : "white";
+
+  const getNameForColor = (color: "white" | "black"): string => {
+    if (replay.isActive) {
+      return color === "white" ? (replay.whitePlayer || "White") : (replay.blackPlayer || "Black");
+    }
+    if (ai.aiEnabled) {
+      return color === ai.playerColor ? playerName : ai.selectedEngine;
+    }
+    return color === "white" ? playerName : "Player 2";
+  };
+
+  const isEditable = (color: "white" | "black"): boolean => {
+    if (replay.isActive) return false;
+    if (ai.aiEnabled) return color === ai.playerColor;
+    return color === "white"; // Only white player name is editable in PvP
+  };
 
   return (
-    <div className="flex flex-col lg:flex-row gap-6 p-6 max-w-5xl mx-auto min-h-screen items-center lg:items-start justify-center">
-      {/* Board area: eval bar + board */}
-      <div className="flex-shrink-0 flex flex-row items-stretch">
+    <div className="flex flex-col lg:flex-row gap-6 p-6 max-w-6xl mx-auto min-h-screen items-center lg:items-start justify-center">
+      {/* Left Panel: Opening, Move History, Game Status */}
+      <div className="w-full lg:w-56 flex flex-col gap-3 order-2 lg:order-1">
+        <OpeningLabel opening={replay.isActive ? replayOpening : currentOpening} />
+
+        <MoveHistory
+          history={replay.isActive ? replay.moves : moveHistory}
+          currentMoveIndex={replay.isActive ? replay.currentIndex : undefined}
+          onMoveClick={replay.isActive ? replay.goToMove : undefined}
+        />
+
+        {!replay.isActive && (
+          <GameStatus
+            status={timeoutMessage || getStatus()}
+            isGameOver={isGameOver || !!timeoutMessage}
+            inCheck={inCheck}
+          />
+        )}
+      </div>
+
+      {/* Center: Board area with eval bar + player names */}
+      <div className="flex-shrink-0 flex flex-row items-stretch order-1 lg:order-2">
         {analysisEnabled && (
           <EvalBar
             scoreCp={evaluation.score}
@@ -211,84 +300,105 @@ export default function ChessGame() {
             boardOrientation={displayOrientation}
           />
         )}
-        <Board
-          fen={displayFen}
-          boardOrientation={displayOrientation}
-          squareStyles={boardDisabled ? {} : squareStyles}
-          arrows={bestMoveArrows}
-          onSquareClick={boardDisabled ? () => {} : onSquareClick}
-          onPieceDrop={boardDisabled ? () => false : onPieceDrop}
-          onPieceDragBegin={boardDisabled ? () => {} : onPieceDragBegin}
-        />
-      </div>
-
-      {/* Sidebar */}
-      <div className="w-full lg:w-72 flex flex-col gap-4">
-        <ThemeSelector />
-
-        {/* AI Mode Selector */}
-        {!replay.isActive && (
-          <GameModeSelector
-            aiEnabled={ai.aiEnabled}
-            aiThinking={ai.aiThinking}
-            selectedEngine={ai.selectedEngine}
-            playerColor={ai.playerColor}
-            availableModels={ai.availableModels}
-            backendOnline={ai.backendOnline}
-            error={ai.error}
-            onToggleAI={ai.toggleAI}
-            onSetEngine={ai.setEngine}
-            onSetColor={ai.setColor}
+        <div className="relative">
+          <PlayerNameBar
+            name={getNameForColor(topColor)}
+            color={topColor}
+            isActive={turn === topColor}
+            capturedPieces={topColor === "white" ? captured.white : captured.black}
+            position="top"
+            isEditable={isEditable(topColor)}
+            onNameChange={handlePlayerNameChange}
           />
-        )}
-
-        <OpeningLabel opening={replay.isActive ? replayOpening : currentOpening} />
-
-        {/* Clock */}
-        {!replay.isActive && (
-          <ChessClock
-            whiteTime={clock.whiteTime}
-            blackTime={clock.blackTime}
-            activeColor={clock.activeColor}
-            isEnabled={clock.isEnabled}
-            timeControl={clock.timeControl}
-            onSetTimeControl={clock.setTimeControl}
+          <Board
+            fen={displayFen}
+            boardOrientation={displayOrientation}
+            squareStyles={boardDisabled ? {} : squareStyles}
+            arrows={bestMoveArrows}
+            onSquareClick={boardDisabled ? () => {} : onSquareClick}
+            onPieceDrop={boardDisabled ? () => false : onPieceDrop}
+            onPieceDragBegin={boardDisabled ? () => {} : onPieceDragBegin}
           />
-        )}
-
-        {/* Status */}
-        {!replay.isActive && (
-          <GameStatus
-            status={timeoutMessage || getStatus()}
-            isGameOver={isGameOver || !!timeoutMessage}
+          <PlayerNameBar
+            name={getNameForColor(bottomColor)}
+            color={bottomColor}
+            isActive={turn === bottomColor}
+            capturedPieces={bottomColor === "white" ? captured.white : captured.black}
+            position="bottom"
+            isEditable={isEditable(bottomColor)}
+            onNameChange={handlePlayerNameChange}
           />
-        )}
 
-        {/* Controls area */}
-        {replay.isActive ? (
-          <ReplayControls
-            currentIndex={replay.currentIndex}
-            totalMoves={replay.totalMoves}
-            onStepBack={replay.stepBack}
-            onStepForward={replay.stepForward}
-            onGoToStart={replay.goToStart}
-            onGoToEnd={replay.goToEnd}
-            onGoToMove={replay.goToMove}
-            onExit={replay.stopReplay}
-          />
-        ) : (
-          <>
+          {/* Controls below the board */}
+          {replay.isActive ? (
+            <ReplayControls
+              currentIndex={replay.currentIndex}
+              totalMoves={replay.totalMoves}
+              onStepBack={replay.stepBack}
+              onStepForward={replay.stepForward}
+              onGoToStart={replay.goToStart}
+              onGoToEnd={replay.goToEnd}
+              onGoToMove={replay.goToMove}
+              onExit={replay.stopReplay}
+            />
+          ) : (
             <GameControls
               onUndo={handleUndo}
+              onRedo={handleRedo}
               onFlip={flipBoard}
               onNewGame={handleNewGame}
-              canUndo={moveHistory.length > 0 && !ai.aiThinking}
+              canUndo={moveHistory.length >= (ai.aiEnabled ? 2 : 1) && !ai.aiThinking}
+              canRedo={canRedo && !ai.aiThinking}
             />
+          )}
+
+          {/* Game over overlay on the board */}
+          {(isGameOver || !!timeoutMessage) && !replay.isActive && (
+            <GameOverOverlay
+              status={timeoutMessage || getStatus()}
+              onNewGame={handleNewGame}
+              onReview={moveHistory.length > 0 ? handleReview : undefined}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Right Sidebar: Settings + Tools */}
+      <div className="w-full lg:w-72 flex flex-col gap-3 order-3">
+        {/* === Game Setup (collapsible) === */}
+        {!replay.isActive && (
+          <CollapsibleSection title="Game Setup" storageKey="chess-section-setup" defaultOpen={true}>
+            <GameModeSelector
+              aiEnabled={ai.aiEnabled}
+              aiThinking={ai.aiThinking}
+              selectedEngine={ai.selectedEngine}
+              playerColor={ai.playerColor}
+              availableModels={ai.availableModels}
+              backendOnline={ai.backendOnline}
+              error={ai.error}
+              onToggleAI={ai.toggleAI}
+              onSetEngine={ai.setEngine}
+              onSetColor={ai.setColor}
+            />
+            <ChessClock
+              whiteTime={clock.whiteTime}
+              blackTime={clock.blackTime}
+              activeColor={clock.activeColor}
+              isEnabled={clock.isEnabled}
+              timeControl={clock.timeControl}
+              onSetTimeControl={clock.setTimeControl}
+            />
+          </CollapsibleSection>
+        )}
+
+        {/* === Tools (collapsible) === */}
+        {!replay.isActive && (
+          <CollapsibleSection title="Tools" storageKey="chess-section-tools" defaultOpen={true}>
             <AnalysisToggle
               analysisEnabled={analysisEnabled}
-              showArrows={showArrows}
               onToggleAnalysis={() => setAnalysisEnabled((prev) => !prev)}
-              onToggleArrows={() => setShowArrows((prev) => !prev)}
+              onHint={handleHint}
+              hintLoading={hintLoading}
               isAvailable={evaluation.isAvailable}
             />
             <div className="flex flex-wrap gap-2">
@@ -297,7 +407,7 @@ export default function ChessGame() {
                 onClick={() => setShowHistory(true)}
                 className="px-3 py-2 bg-blue-700 hover:bg-blue-600 text-white rounded-lg text-sm font-medium transition-colors"
               >
-                Game History
+                History
               </button>
               <button
                 onClick={() => setShowPGN(true)}
@@ -306,7 +416,8 @@ export default function ChessGame() {
                 PGN
               </button>
             </div>
-          </>
+            <ThemeSelector />
+          </CollapsibleSection>
         )}
 
         {/* Game History Panel */}
@@ -316,16 +427,6 @@ export default function ChessGame() {
             onClose={() => setShowHistory(false)}
           />
         )}
-
-        {/* Captured Pieces */}
-        {!replay.isActive && <CapturedPieces captured={getCapturedPieces()} />}
-
-        {/* Move History */}
-        <MoveHistory
-          history={replay.isActive ? replay.moves : moveHistory}
-          currentMoveIndex={replay.isActive ? replay.currentIndex : undefined}
-          onMoveClick={replay.isActive ? replay.goToMove : undefined}
-        />
       </div>
 
       {/* PGN Modal */}
