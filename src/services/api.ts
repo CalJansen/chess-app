@@ -186,3 +186,60 @@ export async function fetchPuzzleThemes(): Promise<string[]> {
     return [];
   }
 }
+
+// ─── Game Review ──────────────────────────────────────────────────────────────
+
+export interface MoveAnalysis {
+  move: string;
+  move_number: number;
+  color: "white" | "black";
+  classification: "best" | "excellent" | "good" | "inaccuracy" | "mistake" | "blunder" | "book" | "forced";
+  score_before: number;
+  score_after: number;
+  score_loss: number;
+  best_move: string | null;
+  mate_before: number | null;
+  mate_after: number | null;
+}
+
+export interface AccuracyStats {
+  white: number;
+  black: number;
+}
+
+export interface ReviewResult {
+  analysis: MoveAnalysis[];
+  accuracy: AccuracyStats;
+}
+
+/**
+ * Request a full game review (Stockfish analysis of every move).
+ * This can take 10-60 seconds depending on game length and depth.
+ */
+export async function fetchGameReview(
+  moves: string[],
+  depth: number = 16,
+  signal?: AbortSignal
+): Promise<ReviewResult | null> {
+  try {
+    const res = await fetch(`${API_BASE}/review`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ moves, depth }),
+      signal,
+      // Long timeout — analysis takes time
+    });
+
+    if (res.status === 503) return null; // Stockfish not available
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.detail || `Review error: ${res.status}`);
+    }
+    return await res.json();
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      return null;
+    }
+    throw err;
+  }
+}

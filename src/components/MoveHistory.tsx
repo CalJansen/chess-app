@@ -2,23 +2,35 @@
 
 import { useRef, useEffect } from "react";
 import { useTheme } from "@/contexts/ThemeContext";
+import { CLASSIFICATION_STYLES } from "@/hooks/useGameReview";
+import type { MoveAnalysis } from "@/services/api";
 
 interface MoveHistoryProps {
   history: string[];
   currentMoveIndex?: number; // for replay mode highlighting
   onMoveClick?: (index: number) => void; // for replay mode navigation
+  reviewAnalysis?: MoveAnalysis[]; // optional review data for color-coding moves
 }
 
 export default function MoveHistory({
   history,
   currentMoveIndex,
   onMoveClick,
+  reviewAnalysis,
 }: MoveHistoryProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const { theme } = useTheme();
 
+  // Auto-scroll to highlighted move during replay, or to bottom during play
   useEffect(() => {
-    if (currentMoveIndex === undefined && containerRef.current) {
+    if (!containerRef.current) return;
+    if (currentMoveIndex !== undefined && currentMoveIndex >= 0) {
+      // Scroll to keep the current move visible
+      const moveEl = containerRef.current.querySelector(`[data-move-index="${currentMoveIndex}"]`);
+      if (moveEl) {
+        moveEl.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      }
+    } else if (currentMoveIndex === undefined) {
       containerRef.current.scrollTop = containerRef.current.scrollHeight;
     }
   }, [history.length, currentMoveIndex]);
@@ -41,7 +53,26 @@ export default function MoveHistory({
     const isHighlighted = currentMoveIndex !== undefined && moveIndex === currentMoveIndex;
     const clickable = isClickable ? "cursor-pointer hover:underline" : "";
     const highlight = isHighlighted ? "bg-blue-600/40 rounded px-1" : "";
-    return `${theme.textSecondary} ${clickable} ${highlight}`;
+
+    // Color-code based on review classification
+    let classColor = theme.textSecondary;
+    if (reviewAnalysis && moveIndex < reviewAnalysis.length) {
+      const cls = reviewAnalysis[moveIndex].classification;
+      const style = CLASSIFICATION_STYLES[cls];
+      if (style) {
+        classColor = style.color;
+      }
+    }
+
+    return `${classColor} ${clickable} ${highlight}`;
+  };
+
+  // Get classification symbol suffix
+  const getSymbol = (moveIndex: number): string => {
+    if (!reviewAnalysis || moveIndex >= reviewAnalysis.length) return "";
+    const cls = reviewAnalysis[moveIndex].classification;
+    const style = CLASSIFICATION_STYLES[cls];
+    return style?.symbol || "";
   };
 
   return (
@@ -58,17 +89,25 @@ export default function MoveHistory({
               <div key={pair.num} className="flex text-sm font-mono">
                 <span className={`${theme.textMuted} w-8 shrink-0`}>{pair.num}.</span>
                 <span
-                  className={`w-16 ${moveClass(pair.whiteIndex)}`}
+                  data-move-index={pair.whiteIndex}
+                  className={`w-20 ${moveClass(pair.whiteIndex)}`}
                   onClick={() => onMoveClick?.(pair.whiteIndex)}
+                  title={reviewAnalysis?.[pair.whiteIndex]
+                    ? `${CLASSIFICATION_STYLES[reviewAnalysis[pair.whiteIndex].classification]?.label} (${reviewAnalysis[pair.whiteIndex].score_loss > 0 ? `-${reviewAnalysis[pair.whiteIndex].score_loss} cp` : "best"})`
+                    : undefined}
                 >
-                  {pair.white}
+                  {pair.white}{getSymbol(pair.whiteIndex)}
                 </span>
                 {pair.black && (
                   <span
-                    className={`${moveClass(pair.blackIndex)} opacity-80`}
+                    data-move-index={pair.blackIndex}
+                    className={`${moveClass(pair.blackIndex)}`}
                     onClick={() => onMoveClick?.(pair.blackIndex)}
+                    title={reviewAnalysis?.[pair.blackIndex]
+                      ? `${CLASSIFICATION_STYLES[reviewAnalysis[pair.blackIndex].classification]?.label} (${reviewAnalysis[pair.blackIndex].score_loss > 0 ? `-${reviewAnalysis[pair.blackIndex].score_loss} cp` : "best"})`
+                      : undefined}
                   >
-                    {pair.black}
+                    {pair.black}{getSymbol(pair.blackIndex)}
                   </span>
                 )}
               </div>
