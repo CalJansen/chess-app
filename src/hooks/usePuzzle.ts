@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import { Chess } from "chess.js";
+import { Chess, Square } from "chess.js";
 import { fetchRandomPuzzle, PuzzleData } from "@/services/api";
 
 export type PuzzleStatus = "loading" | "playing" | "correct" | "wrong" | "solved" | "no-puzzles";
@@ -22,9 +22,15 @@ interface PuzzleState {
   lastMoveCorrect: boolean | null;
   showingSolution: boolean;
   solutionMoves: string[]; // SAN versions of solution for display
+  lastMove: { from: string; to: string } | null;
+  selectedSquare: string | null;
+  legalMoves: string[];
+  inCheck: boolean;
 
   loadPuzzle: (ratingMin?: number, ratingMax?: number, theme?: string) => void;
   tryMove: (from: string, to: string, promotion?: string) => boolean;
+  selectSquare: (square: string) => void;
+  clearSelection: () => void;
   showSolution: () => void;
   retry: () => void;
 }
@@ -53,6 +59,9 @@ export function usePuzzle(): PuzzleState {
   const [showingSolution, setShowingSolution] = useState(false);
   const [solutionMoves, setSolutionMoves] = useState<string[]>([]);
   const [stats, setStats] = useState<PuzzleStats>(loadStats);
+  const [lastMove, setLastMove] = useState<{ from: string; to: string } | null>(null);
+  const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
+  const [legalMoves, setLegalMoves] = useState<string[]>([]);
 
   // Game instance ref for move validation
   const gameRef = useRef<Chess>(new Chess());
@@ -114,6 +123,9 @@ export function usePuzzle(): PuzzleState {
     setFen(game.fen());
     setSolutionIndex(0);
     setSolutionMoves(sans);
+    setLastMove({ from: setupMove.slice(0, 2), to: setupMove.slice(2, 4) });
+    setSelectedSquare(null);
+    setLegalMoves([]);
     setStatus("playing");
   }, []);
 
@@ -134,20 +146,25 @@ export function usePuzzle(): PuzzleState {
 
     if (!expectedUCI) return false;
 
-    // Build the user's UCI move
-    const userUCI = from + to + (promotion || "");
+    // Only include promotion suffix if this is actually a pawn reaching the last rank
+    const piece = game.get(from as Square);
+    const isPromotion = piece?.type === "p" && (to[1] === "8" || to[1] === "1");
+    const userUCI = from + to + (isPromotion ? (promotion || "q") : "");
 
     // Check if the move matches
     if (userUCI === expectedUCI) {
       // Correct! Play the move
       try {
-        game.move({ from, to, promotion });
+        game.move({ from, to, promotion: isPromotion ? (promotion || "q") : undefined });
       } catch {
         return false;
       }
 
       setFen(game.fen());
       setLastMoveCorrect(true);
+      setLastMove({ from, to });
+      setSelectedSquare(null);
+      setLegalMoves([]);
 
       // Check if there's an opponent reply to play
       const replyIndex = expectedMoveIndex + 1;
@@ -162,6 +179,7 @@ export function usePuzzle(): PuzzleState {
               promotion: reply.length > 4 ? reply[4] : undefined,
             });
             setFen(game.fen());
+            setLastMove({ from: reply.slice(0, 2), to: reply.slice(2, 4) });
           } catch { /* ignore */ }
         }, 400);
       }
@@ -228,6 +246,33 @@ export function usePuzzle(): PuzzleState {
     setStatus("wrong");
   }, [status]);
 
+  // Select a square — show legal moves from that square
+  const selectSquare = useCallback((square: string) => {
+    const game = gameRef.current;
+    if (selectedSquare === square) {
+      // Deselect
+      setSelectedSquare(null);
+      setLegalMoves([]);
+      return;
+    }
+
+    // Check if this square has a piece of the side to move
+    const piece = game.get(square as Square);
+    if (piece && piece.color === game.turn()) {
+      setSelectedSquare(square);
+      const moves = game.moves({ square: square as Square, verbose: true });
+      setLegalMoves(moves.map(m => m.to));
+    } else {
+      setSelectedSquare(null);
+      setLegalMoves([]);
+    }
+  }, [selectedSquare]);
+
+  const clearSelection = useCallback(() => {
+    setSelectedSquare(null);
+    setLegalMoves([]);
+  }, []);
+
   const retry = useCallback(() => {
     const data = puzzleRef.current;
     if (!data) return;
@@ -246,6 +291,9 @@ export function usePuzzle(): PuzzleState {
     setSolutionIndex(0);
     setLastMoveCorrect(null);
     setShowingSolution(false);
+    setLastMove({ from: setupMove.slice(0, 2), to: setupMove.slice(2, 4) });
+    setSelectedSquare(null);
+    setLegalMoves([]);
     setStatus("playing");
   }, []);
 
@@ -253,6 +301,9 @@ export function usePuzzle(): PuzzleState {
   useEffect(() => {
     setStats(loadStats());
   }, []);
+
+  // Compute inCheck from current game state
+  const inCheck = gameRef.current.inCheck();
 
   return {
     puzzle,
@@ -264,8 +315,14 @@ export function usePuzzle(): PuzzleState {
     lastMoveCorrect,
     showingSolution,
     solutionMoves,
+    lastMove,
+    selectedSquare,
+    legalMoves,
+    inCheck,
     loadPuzzle,
     tryMove,
+    selectSquare,
+    clearSelection,
     showSolution,
     retry,
   };

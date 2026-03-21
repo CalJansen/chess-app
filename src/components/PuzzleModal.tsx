@@ -42,16 +42,102 @@ export default function PuzzleModal({ onClose }: PuzzleModalProps) {
   }, [puzzle.loadPuzzle, ratingMin, ratingMax, selectedTheme]);
 
   const handlePieceDrop = useCallback(
-    (sourceSquare: string, targetSquare: string, piece: string): boolean => {
-      // Auto-promote to queen
-      const promotion = piece[1]?.toLowerCase() === "p" ? "q" : undefined;
-      return puzzle.tryMove(sourceSquare, targetSquare, promotion);
+    (sourceSquare: string, targetSquare: string): boolean => {
+      return puzzle.tryMove(sourceSquare, targetSquare);
     },
     [puzzle.tryMove]
   );
 
-  // Determine board orientation — player plays the side to move
-  const sideToMove = puzzle.fen.includes(" w ") ? "white" : "black";
+  const handleSquareClick = useCallback(
+    (square: string) => {
+      if (puzzle.status !== "playing" && puzzle.status !== "wrong") return;
+
+      // If a piece is already selected and this square is a legal move, try it
+      if (puzzle.selectedSquare && puzzle.selectedSquare !== square && puzzle.legalMoves.includes(square)) {
+        puzzle.tryMove(puzzle.selectedSquare, square);
+        return;
+      }
+
+      // Otherwise select/deselect this square
+      puzzle.selectSquare(square);
+    },
+    [puzzle]
+  );
+
+  // Lock board orientation to the player's color (determined when puzzle loads, not on every FEN change)
+  const [boardSide, setBoardSide] = useState<"white" | "black">("white");
+  useEffect(() => {
+    if (puzzle.status === "playing" && puzzle.puzzle) {
+      // After the setup move, it's the player's turn — lock orientation to that color
+      setBoardSide(puzzle.fen.includes(" w ") ? "white" : "black");
+    }
+  }, [puzzle.puzzle]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Build square styles for highlighting
+  const squareStyles: Record<string, React.CSSProperties> = {};
+
+  // Last move highlight
+  if (puzzle.lastMove) {
+    squareStyles[puzzle.lastMove.from] = { backgroundColor: "rgba(255, 255, 0, 0.2)" };
+    squareStyles[puzzle.lastMove.to] = { backgroundColor: "rgba(255, 255, 0, 0.2)" };
+  }
+
+  // Check highlight
+  if (puzzle.inCheck) {
+    // Find the king square
+    const fenParts = puzzle.fen.split(" ");
+    const turnColor = fenParts[1] === "w" ? "K" : "k";
+    const rows = fenParts[0].split("/");
+    for (let r = 0; r < 8; r++) {
+      let col = 0;
+      for (const ch of rows[r]) {
+        if (ch >= "1" && ch <= "8") {
+          col += parseInt(ch);
+        } else {
+          if (ch === turnColor) {
+            const file = String.fromCharCode(97 + col);
+            const rank = 8 - r;
+            squareStyles[`${file}${rank}`] = {
+              background: "radial-gradient(circle, rgba(255, 0, 0, 0.6) 0%, rgba(255, 0, 0, 0.3) 50%, rgba(255, 0, 0, 0) 70%)",
+            };
+          }
+          col++;
+        }
+      }
+    }
+  }
+
+  // Selected square highlight
+  if (puzzle.selectedSquare) {
+    squareStyles[puzzle.selectedSquare] = { backgroundColor: "rgba(255, 255, 0, 0.4)" };
+  }
+
+  // Legal move dots
+  for (const sq of puzzle.legalMoves) {
+    // Check if square has a piece (capture dot vs empty dot)
+    const fenParts = puzzle.fen.split(" ")[0].split("/");
+    const file = sq.charCodeAt(0) - 97;
+    const rank = 8 - parseInt(sq[1]);
+    let col = 0;
+    let hasPiece = false;
+    for (const ch of fenParts[rank]) {
+      if (ch >= "1" && ch <= "8") {
+        col += parseInt(ch);
+      } else {
+        if (col === file) hasPiece = true;
+        col++;
+      }
+    }
+    if (hasPiece) {
+      squareStyles[sq] = {
+        background: "radial-gradient(circle, transparent 55%, rgba(0, 0, 0, 0.3) 55%)",
+      };
+    } else {
+      squareStyles[sq] = {
+        background: "radial-gradient(circle, rgba(0, 0, 0, 0.25) 25%, transparent 25%)",
+      };
+    }
+  }
 
   // Status message and colors
   let statusMessage = "";
@@ -60,7 +146,7 @@ export default function PuzzleModal({ onClose }: PuzzleModalProps) {
     statusMessage = "Loading puzzle...";
     statusColor = theme.textMuted;
   } else if (puzzle.status === "playing") {
-    statusMessage = `Find the best move for ${sideToMove}`;
+    statusMessage = `Find the best move for ${boardSide}`;
     statusColor = theme.textSecondary;
   } else if (puzzle.status === "wrong") {
     statusMessage = puzzle.showingSolution
@@ -110,11 +196,18 @@ export default function PuzzleModal({ onClose }: PuzzleModalProps) {
               <Chessboard
                 options={{
                   position: puzzle.fen,
-                  boardOrientation: sideToMove as "white" | "black",
-                  onPieceDrop: ({ sourceSquare, targetSquare, piece }) => {
+                  boardOrientation: boardSide,
+                  squareStyles,
+                  onSquareClick: ({ square }) => {
+                    handleSquareClick(square);
+                  },
+                  onPieceDrag: ({ square }) => {
+                    if (square) puzzle.selectSquare(square);
+                  },
+                  onPieceDrop: ({ sourceSquare, targetSquare }) => {
                     if (!targetSquare) return false;
                     if (puzzle.status !== "playing" && puzzle.status !== "wrong") return false;
-                    return handlePieceDrop(sourceSquare, targetSquare, piece?.pieceType ?? "p");
+                    return handlePieceDrop(sourceSquare, targetSquare);
                   },
                   darkSquareStyle: { backgroundColor: theme.darkSquare },
                   lightSquareStyle: { backgroundColor: theme.lightSquare },

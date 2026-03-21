@@ -112,6 +112,27 @@ venv\Scripts\python.exe -u -m training.evaluate_model
 
 Trained models (`.pt` files) are saved to `backend/models/` and auto-discovered when the backend starts.
 
+#### Stockfish-Supervised Training (Recommended)
+
+Train with Stockfish position evaluations instead of game outcomes for much better accuracy.
+
+```bash
+# Full pipeline: extract positions, label with Stockfish, train
+venv\Scripts\python.exe -u -m training.train_stockfish --max-games 5000 --depth 12
+
+# More data + deeper analysis (slower, better labels)
+venv\Scripts\python.exe -u -m training.train_stockfish --max-games 10000 --depth 15
+
+# Reuse cached labeled data (skip Stockfish labeling phase)
+venv\Scripts\python.exe -u -m training.train_stockfish --labeled-data data/sf_training_data.pt
+
+# Retrain with different hyperparameters using cached labels
+venv\Scripts\python.exe -u -m training.train_stockfish \
+  --labeled-data data/sf_training_data.pt \
+  --output models/chess_value_sf_v2.pt \
+  --lr 0.0003 --epochs 80
+```
+
 #### Training Options
 
 ```bash
@@ -198,6 +219,7 @@ chess-app/
 │   │   ├── prepare_dataset.py
 │   │   ├── board_encoding.py
 │   │   ├── train.py
+│   │   ├── train_stockfish.py  # Stockfish-supervised training
 │   │   ├── evaluate_model.py
 │   │   └── tournament.py
 │   ├── routers/            # API route handlers

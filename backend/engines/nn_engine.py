@@ -142,16 +142,22 @@ class NNEngine(ChessEngine):
             return min_eval
 
     def _search_at_depth(self, board, depth, is_maximizing, deadline):
-        """Search all moves at a given depth. Returns (best_score, best_moves, stats)."""
+        """Search all moves at a given depth. Returns (best_score, best_moves, stats).
+
+        Uses a proper alpha-beta window at the root level so pruning carries
+        across root moves.
+        """
         stats = {"nodes": 0, "cutoffs": 0}
         best_score = float("-inf") if is_maximizing else float("inf")
         best_moves = []
+        alpha = float("-inf")
+        beta = float("inf")
 
         for move in board.legal_moves:
             board.push(move)
             score = self._minimax(
                 board, depth - 1,
-                float("-inf"), float("inf"),
+                alpha, beta,
                 not is_maximizing, stats, deadline,
             )
             board.pop()
@@ -162,12 +168,14 @@ class NNEngine(ChessEngine):
                     best_moves = [move]
                 elif score == best_score:
                     best_moves.append(move)
+                alpha = max(alpha, best_score)
             else:
                 if score < best_score:
                     best_score = score
                     best_moves = [move]
                 elif score == best_score:
                     best_moves.append(move)
+                beta = min(beta, best_score)
 
         return best_score, best_moves, stats
 
@@ -183,6 +191,8 @@ class NNEngine(ChessEngine):
         total_stats = {"nodes": 0, "cutoffs": 0}
 
         for depth in range(1, self._search_depth + 1):
+            # Save board state so we can restore it if a timeout corrupts the stack
+            stack_depth = len(board.move_stack)
             try:
                 score, moves, stats = self._search_at_depth(
                     board, depth, is_maximizing, deadline
@@ -197,8 +207,9 @@ class NNEngine(ChessEngine):
                     break
 
             except SearchTimeout:
-                total_stats["nodes"] += stats["nodes"]
-                total_stats["cutoffs"] += stats["cutoffs"]
+                # Restore board state — timeout may leave unbalanced push/pops
+                while len(board.move_stack) > stack_depth:
+                    board.pop()
                 break
 
         elapsed = time.time() - start_time
