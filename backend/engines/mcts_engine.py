@@ -70,7 +70,7 @@ class MCTSNode:
     @property
     def is_terminal(self) -> bool:
         """Is this a game-ending position?"""
-        return self.board.is_game_over()
+        return self.board.is_game_over(claim_draw=True)
 
     def ucb1_score(self, exploration_constant: float = 1.414) -> float:
         """
@@ -141,7 +141,7 @@ def mcts_rollout(board: chess.Board, max_depth: int = 100) -> float:
     starting_turn = board.turn
     depth = 0
 
-    while not sim_board.is_game_over() and depth < max_depth:
+    while not sim_board.is_game_over(claim_draw=True) and depth < max_depth:
         moves = list(sim_board.legal_moves)
         sim_board.push(random.choice(moves))
         depth += 1

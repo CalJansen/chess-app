@@ -41,7 +41,7 @@ from engines.mcts_engine import MCTSEngine
 from engines.nn_engine import discover_models
 
 
-MAX_MOVES = 200  # Per side — prevents infinite games
+MAX_MOVES = 150  # Per side — prevents infinite games (with claim_draw, most end much sooner)
 
 
 def get_all_engines():
@@ -76,7 +76,7 @@ def play_game(white_engine, black_engine, verbose=False):
     move_count = 0
     moves = []
 
-    while not board.is_game_over() and move_count < MAX_MOVES * 2:
+    while not board.is_game_over(claim_draw=True) and move_count < MAX_MOVES * 2:
         if board.turn == chess.WHITE:
             move = white_engine.select_move(board)
         else:
@@ -95,8 +95,9 @@ def play_game(white_engine, black_engine, verbose=False):
     if verbose:
         print()
 
-    if board.is_checkmate():
-        result = "black" if board.turn == chess.WHITE else "white"
+    outcome = board.outcome(claim_draw=True)
+    if outcome and outcome.winner is not None:
+        result = "white" if outcome.winner == chess.WHITE else "black"
     else:
         result = "draw"
 
