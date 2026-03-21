@@ -7,6 +7,7 @@ import { useReplayMode } from "@/hooks/useReplayMode";
 import { useSoundEffects } from "@/hooks/useSoundEffects";
 import { useChessClock } from "@/hooks/useChessClock";
 import { useStockfishEval } from "@/hooks/useStockfishEval";
+import { useGameReview } from "@/hooks/useGameReview";
 import { saveCompletedGame } from "@/utils/gameHistory";
 import { findOpening } from "@/utils/openings";
 import { fetchEvaluation } from "@/services/api";
@@ -20,6 +21,7 @@ import ThemeSelector from "./ThemeSelector";
 import OpeningLabel from "./OpeningLabel";
 import GameModeSelector from "./GameModeSelector";
 import ReplayControls from "./ReplayControls";
+import ReviewPanel from "./ReviewPanel";
 import GameHistoryPanel from "./GameHistoryPanel";
 import PGNModal from "./PGNModal";
 import SoundToggle from "./SoundToggle";
@@ -38,6 +40,7 @@ export default function ChessGame() {
   const replay = useReplayMode();
   const sound = useSoundEffects();
   const clock = useChessClock();
+  const review = useGameReview();
 
   const {
     fen,
@@ -169,7 +172,8 @@ export default function ChessGame() {
     clock.resetClock();
     setGameEndSaved(false);
     setHintArrow(null);
-  }, [newGame, clock]);
+    review.clearReview();
+  }, [newGame, clock, review]);
 
   const handleHint = useCallback(async () => {
     if (hintLoading || isGameOver) return;
@@ -208,9 +212,13 @@ export default function ChessGame() {
   // Review handler for game-over overlay — must be above early return (Rules of Hooks)
   const handleReview = useCallback(() => {
     if (moveHistory.length > 0) {
-      replay.startReplay(moveHistory);
+      replay.startReplay(moveHistory,
+        ai.aiEnabled && ai.playerColor === "black" ? ai.selectedEngine : playerName,
+        ai.aiEnabled && ai.playerColor === "white" ? ai.selectedEngine : (ai.aiEnabled ? playerName : "Player 2"),
+      );
+      review.startReview(moveHistory);
     }
-  }, [moveHistory, replay]);
+  }, [moveHistory, replay, review, ai.aiEnabled, ai.playerColor, ai.selectedEngine, playerName]);
 
   // Determine display state (must be above early return so hooks are consistent)
   const displayFen = replay.isActive ? replay.displayFen : fen;
@@ -220,8 +228,9 @@ export default function ChessGame() {
     ? ai.playerColor
     : boardOrientation;
 
-  // Stockfish evaluation — must be called before any early returns (Rules of Hooks)
-  const evaluation = useStockfishEval({ fen: displayFen, enabled: analysisEnabled });
+  // Stockfish evaluation — enabled during active analysis or during game review replay
+  const evalEnabled = analysisEnabled || (replay.isActive && review.status !== "idle");
+  const evaluation = useStockfishEval({ fen: displayFen, enabled: evalEnabled });
 
   if (!initialized) {
     return (
@@ -281,6 +290,7 @@ export default function ChessGame() {
           history={replay.isActive ? replay.moves : moveHistory}
           currentMoveIndex={replay.isActive ? replay.currentIndex : undefined}
           onMoveClick={replay.isActive ? replay.goToMove : undefined}
+          reviewAnalysis={review.status === "done" ? review.analysis : undefined}
         />
 
         {!replay.isActive && (
@@ -290,11 +300,24 @@ export default function ChessGame() {
             inCheck={inCheck}
           />
         )}
+
+        {/* Review panel — shown during replay mode */}
+        {replay.isActive && (
+          <ReviewPanel
+            status={review.status}
+            analysis={review.analysis}
+            accuracy={review.accuracy}
+            error={review.error}
+            progress={review.progress}
+            currentMoveIndex={replay.currentIndex}
+            onStartReview={() => review.startReview(replay.moves)}
+          />
+        )}
       </div>
 
       {/* Center: Board area with eval bar + player names */}
       <div className="flex-shrink-0 flex flex-row items-stretch order-1 lg:order-2">
-        {analysisEnabled && (
+        {evalEnabled && (
           <EvalBar
             scoreCp={evaluation.score}
             mateIn={evaluation.mateIn}
@@ -341,7 +364,7 @@ export default function ChessGame() {
               onGoToStart={replay.goToStart}
               onGoToEnd={replay.goToEnd}
               onGoToMove={replay.goToMove}
-              onExit={replay.stopReplay}
+              onExit={() => { replay.stopReplay(); review.clearReview(); }}
             />
           ) : (
             <GameControls
