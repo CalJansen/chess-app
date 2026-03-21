@@ -14,7 +14,7 @@ from engines.material_engine import MaterialEngine
 from engines.minimax_engine import MinimaxEngine
 from engines.mcts_engine import MCTSEngine
 from engines.nn_engine import discover_models
-from routers import moves, models, evaluate, tournament_games
+from routers import moves, models, evaluate, tournament_games, puzzles
 
 # ─── Create the FastAPI app ───────────────────────────────────────────────────
 
@@ -71,7 +71,10 @@ app.include_router(moves.router, prefix="/api")
 app.include_router(models.router, prefix="/api")
 app.include_router(evaluate.router, prefix="/api")
 app.include_router(tournament_games.router, prefix="/api")
+app.include_router(puzzles.router, prefix="/api")
 
+# Load puzzle database
+puzzles.load_puzzles()
 
 # ─── Health check ─────────────────────────────────────────────────────────────
 

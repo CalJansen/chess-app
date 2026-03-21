@@ -132,3 +132,57 @@ export async function checkStockfishAvailable(): Promise<boolean> {
     return false;
   }
 }
+
+// ─── Chess Puzzles ──────────────────────────────────────────────────────────
+
+export interface PuzzleData {
+  id: string;
+  fen: string;
+  moves: string[];     // UCI moves: first is setup, rest are solution
+  rating: number;
+  themes: string[];
+  nb_plays: number;
+  popularity: number;
+}
+
+/**
+ * Fetch a random puzzle matching the given filters.
+ */
+export async function fetchRandomPuzzle(
+  ratingMin: number = 0,
+  ratingMax: number = 9999,
+  theme?: string
+): Promise<PuzzleData | null> {
+  try {
+    const params = new URLSearchParams();
+    if (ratingMin > 0) params.set("rating_min", String(ratingMin));
+    if (ratingMax < 9999) params.set("rating_max", String(ratingMax));
+    if (theme) params.set("theme", theme);
+
+    const res = await fetch(`${API_BASE}/puzzles/random?${params}`, {
+      signal: AbortSignal.timeout(5000),
+    });
+
+    if (res.status === 503) return null; // No puzzles loaded
+    if (!res.ok) return null;
+
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fetch the list of available puzzle themes.
+ */
+export async function fetchPuzzleThemes(): Promise<string[]> {
+  try {
+    const res = await fetch(`${API_BASE}/puzzles/themes`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return [];
+    return await res.json();
+  } catch {
+    return [];
+  }
+}

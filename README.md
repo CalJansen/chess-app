@@ -75,6 +75,23 @@ curl http://localhost:8000/api/evaluate/status
 curl -X POST http://localhost:8000/api/evaluate -H "Content-Type: application/json" -d "{\"fen\":\"rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\"}"
 ```
 
+### Chess Puzzles
+
+Download and solve chess puzzles from the Lichess puzzle database (4M+ puzzles).
+
+```bash
+# Download 50K puzzles (default)
+venv\Scripts\python.exe -u -m training.download_puzzles
+
+# Filter by rating and theme
+venv\Scripts\python.exe -u -m training.download_puzzles --max-puzzles 100000 --min-rating 1200 --max-rating 2000
+
+# Filter by specific themes
+venv\Scripts\python.exe -u -m training.download_puzzles --themes "mate fork pin"
+```
+
+Once downloaded, puzzles are available via the "Puzzles" button in the app. Filter by difficulty and theme, track your solve rate and streak.
+
 ### Training Pipeline
 
 Train a neural network to evaluate chess positions using games from the Lichess open database.

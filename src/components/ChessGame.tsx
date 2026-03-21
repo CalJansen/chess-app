@@ -28,6 +28,7 @@ import EvalBar from "./EvalBar";
 import AnalysisToggle from "./AnalysisToggle";
 import GameOverOverlay from "./GameOverOverlay";
 import CollapsibleSection from "./CollapsibleSection";
+import PuzzleModal from "./PuzzleModal";
 
 export default function ChessGame() {
   // AI state needs to be declared before useChessGame so we can pass autoFlip option
@@ -78,6 +79,7 @@ export default function ChessGame() {
 
   const [showHistory, setShowHistory] = useState(false);
   const [showPGN, setShowPGN] = useState(false);
+  const [showPuzzles, setShowPuzzles] = useState(false);
   const [gameEndSaved, setGameEndSaved] = useState(false);
 
   // Analysis state — persisted to localStorage
@@ -415,6 +417,12 @@ export default function ChessGame() {
               >
                 PGN
               </button>
+              <button
+                onClick={() => setShowPuzzles(true)}
+                className="px-3 py-2 bg-amber-700 hover:bg-amber-600 text-white rounded-lg text-sm font-medium transition-colors"
+              >
+                Puzzles
+              </button>
             </div>
             <ThemeSelector />
           </CollapsibleSection>
@@ -437,6 +445,11 @@ export default function ChessGame() {
           onImport={handlePGNImport}
           onClose={() => setShowPGN(false)}
         />
+      )}
+
+      {/* Puzzle Modal */}
+      {showPuzzles && (
+        <PuzzleModal onClose={() => setShowPuzzles(false)} />
       )}
     </div>
   );
