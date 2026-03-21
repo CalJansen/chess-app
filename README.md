@@ -133,6 +133,21 @@ venv\Scripts\python.exe -u -m training.train_stockfish \
   --lr 0.0003 --epochs 80
 ```
 
+#### V2 Architecture (SE-ResNet + Enhanced Encoding)
+
+Train a larger model with Squeeze-and-Excitation attention blocks and 26-plane board encoding (adds attack maps, pawn structure, king safety, center control, material imbalance, mobility). Data augmentation via horizontal board mirroring doubles the effective dataset size.
+
+```bash
+# Full pipeline: extract, label, train V2
+venv\Scripts\python.exe -u -m training.train_v2 --max-games 5000 --depth 12
+
+# Reuse cached labels (separate cache from v1 due to different encoding)
+venv\Scripts\python.exe -u -m training.train_v2 --labeled-data data/sf_v2_training_data.pt
+
+# Compare v1 vs v2 in a tournament
+venv\Scripts\python.exe -u -m training.tournament --engines nn-chess_value_v2 nn-chess_value_sf_v1 minimax-d3 --games 20
+```
+
 #### Training Options
 
 ```bash
