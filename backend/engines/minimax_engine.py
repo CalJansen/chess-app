@@ -31,7 +31,7 @@ Expected strength:
 import random
 import time
 import chess
-from .base import ChessEngine
+from .base import ChessEngine, SearchTimeout
 
 
 # ─── Piece Values (centipawns) ─────────────────────────────────────────────────
@@ -223,9 +223,9 @@ def order_moves(board: chess.Board) -> list:
 # ─── Minimax with Alpha-Beta ──────────────────────────────────────────────────
 
 def minimax(board: chess.Board, depth: int, alpha: float, beta: float,
-            maximizing: bool, stats: dict) -> int:
+            maximizing: bool, stats: dict, deadline: float = None) -> int:
     """
-    Minimax search with alpha-beta pruning.
+    Minimax search with alpha-beta pruning and optional time limit.
 
     Args:
         board: Current position
@@ -234,6 +234,7 @@ def minimax(board: chess.Board, depth: int, alpha: float, beta: float,
         beta: Best score the minimizer can guarantee (starts at +infinity)
         maximizing: True if it's the maximizing player's turn (white)
         stats: Dict to track search statistics (nodes evaluated, etc.)
+        deadline: time.time() value after which we should abort (raises SearchTimeout)
 
     Returns:
         The evaluation score for this position (from white's perspective)
@@ -250,6 +251,10 @@ def minimax(board: chess.Board, depth: int, alpha: float, beta: float,
     """
     stats["nodes"] += 1
 
+    # Check time limit every 1024 nodes to avoid syscall overhead
+    if deadline and stats["nodes"] % 1024 == 0 and time.time() > deadline:
+        raise SearchTimeout()
+
     # Base case: reached our depth limit or the game is over
     if depth == 0 or board.is_game_over():
         return evaluate(board)
@@ -260,7 +265,7 @@ def minimax(board: chess.Board, depth: int, alpha: float, beta: float,
         max_eval = float("-inf")
         for move in ordered_moves:
             board.push(move)
-            eval_score = minimax(board, depth - 1, alpha, beta, False, stats)
+            eval_score = minimax(board, depth - 1, alpha, beta, False, stats, deadline)
             board.pop()
             max_eval = max(max_eval, eval_score)
             alpha = max(alpha, eval_score)
@@ -272,7 +277,7 @@ def minimax(board: chess.Board, depth: int, alpha: float, beta: float,
         min_eval = float("inf")
         for move in ordered_moves:
             board.push(move)
-            eval_score = minimax(board, depth - 1, alpha, beta, True, stats)
+            eval_score = minimax(board, depth - 1, alpha, beta, True, stats, deadline)
             board.pop()
             min_eval = min(min_eval, eval_score)
             beta = min(beta, eval_score)
@@ -293,6 +298,7 @@ class MinimaxEngine(ChessEngine):
     """
 
     def __init__(self, depth: int = 3):
+        super().__init__()
         self._depth = depth
 
     @property
@@ -303,25 +309,19 @@ class MinimaxEngine(ChessEngine):
     def description(self) -> str:
         return f"Minimax with alpha-beta pruning, depth {self._depth} -- material + positional evaluation."
 
-    def select_move(self, board: chess.Board) -> chess.Move:
-        start_time = time.time()
+    def _search_at_depth(self, board, depth, is_maximizing, deadline):
+        """Search all moves at a given depth. Returns (best_score, best_moves, stats)."""
         stats = {"nodes": 0, "cutoffs": 0}
-
-        best_score = float("-inf") if board.turn == chess.WHITE else float("inf")
+        best_score = float("-inf") if is_maximizing else float("inf")
         best_moves = []
-        is_maximizing = board.turn == chess.WHITE
-
         ordered_moves = order_moves(board)
 
         for move in ordered_moves:
             board.push(move)
             score = minimax(
-                board,
-                self._depth - 1,
-                float("-inf"),
-                float("inf"),
-                not is_maximizing,
-                stats,
+                board, depth - 1,
+                float("-inf"), float("inf"),
+                not is_maximizing, stats, deadline,
             )
             board.pop()
 
@@ -338,10 +338,47 @@ class MinimaxEngine(ChessEngine):
                 elif score == best_score:
                     best_moves.append(move)
 
+        return best_score, best_moves, stats
+
+    def select_move(self, board: chess.Board) -> chess.Move:
+        start_time = time.time()
+        deadline = start_time + self.time_limit
+        is_maximizing = board.turn == chess.WHITE
+
+        # Iterative deepening: search depth 1, 2, ... up to max depth.
+        # If time runs out mid-search, use the result from the last
+        # completed depth. This ensures we always have a move, even
+        # if the full-depth search would take too long.
+        best_moves = list(board.legal_moves)  # Fallback: any legal move
+        best_score = 0
+        completed_depth = 0
+        total_stats = {"nodes": 0, "cutoffs": 0}
+
+        for depth in range(1, self._depth + 1):
+            try:
+                score, moves, stats = self._search_at_depth(
+                    board, depth, is_maximizing, deadline
+                )
+                best_score = score
+                best_moves = moves
+                completed_depth = depth
+                total_stats["nodes"] += stats["nodes"]
+                total_stats["cutoffs"] += stats["cutoffs"]
+
+                # If we found a forced mate, no need to search deeper
+                if abs(best_score) >= 90000:
+                    break
+
+            except SearchTimeout:
+                # Time ran out during this depth — use results from last completed depth
+                total_stats["nodes"] += stats["nodes"]
+                total_stats["cutoffs"] += stats["cutoffs"]
+                break
+
         elapsed = time.time() - start_time
         print(
-            f"  [{self.name}] depth={self._depth} | "
-            f"nodes={stats['nodes']:,} | cutoffs={stats['cutoffs']:,} | "
+            f"  [{self.name}] depth={completed_depth}/{self._depth} | "
+            f"nodes={total_stats['nodes']:,} | cutoffs={total_stats['cutoffs']:,} | "
             f"score={best_score} | time={elapsed:.2f}s"
         )
 

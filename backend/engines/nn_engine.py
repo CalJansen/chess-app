@@ -29,7 +29,7 @@ import torch
 import numpy as np
 import chess
 
-from .base import ChessEngine
+from .base import ChessEngine, SearchTimeout
 from .nn_model import ChessValueNetwork
 from training.board_encoding import encode_board
 
@@ -45,6 +45,7 @@ class NNEngine(ChessEngine):
     """
 
     def __init__(self, model_path: str, search_depth: int = 2):
+        super().__init__()
         self._model_path = model_path
         self._search_depth = search_depth
         self._model_name = os.path.splitext(os.path.basename(model_path))[0]
@@ -104,9 +105,13 @@ class NNEngine(ChessEngine):
         return value
 
     def _minimax(self, board: chess.Board, depth: int, alpha: float, beta: float,
-                 maximizing: bool, stats: dict) -> float:
+                 maximizing: bool, stats: dict, deadline: float = None) -> float:
         """Minimax search using neural network evaluation at leaf nodes."""
         stats["nodes"] += 1
+
+        # Check time every 256 nodes
+        if deadline and stats["nodes"] % 256 == 0 and time.time() > deadline:
+            raise SearchTimeout()
 
         if depth == 0 or board.is_game_over():
             return self._evaluate(board)
@@ -115,7 +120,7 @@ class NNEngine(ChessEngine):
             max_eval = float("-inf")
             for move in board.legal_moves:
                 board.push(move)
-                eval_score = self._minimax(board, depth - 1, alpha, beta, False, stats)
+                eval_score = self._minimax(board, depth - 1, alpha, beta, False, stats, deadline)
                 board.pop()
                 max_eval = max(max_eval, eval_score)
                 alpha = max(alpha, eval_score)
@@ -127,7 +132,7 @@ class NNEngine(ChessEngine):
             min_eval = float("inf")
             for move in board.legal_moves:
                 board.push(move)
-                eval_score = self._minimax(board, depth - 1, alpha, beta, True, stats)
+                eval_score = self._minimax(board, depth - 1, alpha, beta, True, stats, deadline)
                 board.pop()
                 min_eval = min(min_eval, eval_score)
                 beta = min(beta, eval_score)
@@ -136,20 +141,18 @@ class NNEngine(ChessEngine):
                     break
             return min_eval
 
-    def select_move(self, board: chess.Board) -> chess.Move:
-        start_time = time.time()
+    def _search_at_depth(self, board, depth, is_maximizing, deadline):
+        """Search all moves at a given depth. Returns (best_score, best_moves, stats)."""
         stats = {"nodes": 0, "cutoffs": 0}
-
-        best_score = float("-inf") if board.turn == chess.WHITE else float("inf")
+        best_score = float("-inf") if is_maximizing else float("inf")
         best_moves = []
-        is_maximizing = board.turn == chess.WHITE
 
         for move in board.legal_moves:
             board.push(move)
             score = self._minimax(
-                board, self._search_depth - 1,
+                board, depth - 1,
                 float("-inf"), float("inf"),
-                not is_maximizing, stats,
+                not is_maximizing, stats, deadline,
             )
             board.pop()
 
@@ -166,10 +169,42 @@ class NNEngine(ChessEngine):
                 elif score == best_score:
                     best_moves.append(move)
 
+        return best_score, best_moves, stats
+
+    def select_move(self, board: chess.Board) -> chess.Move:
+        start_time = time.time()
+        deadline = start_time + self.time_limit
+        is_maximizing = board.turn == chess.WHITE
+
+        # Iterative deepening with time limit
+        best_moves = list(board.legal_moves)
+        best_score = 0.0
+        completed_depth = 0
+        total_stats = {"nodes": 0, "cutoffs": 0}
+
+        for depth in range(1, self._search_depth + 1):
+            try:
+                score, moves, stats = self._search_at_depth(
+                    board, depth, is_maximizing, deadline
+                )
+                best_score = score
+                best_moves = moves
+                completed_depth = depth
+                total_stats["nodes"] += stats["nodes"]
+                total_stats["cutoffs"] += stats["cutoffs"]
+
+                if abs(best_score) >= 0.99:  # Found forced mate
+                    break
+
+            except SearchTimeout:
+                total_stats["nodes"] += stats["nodes"]
+                total_stats["cutoffs"] += stats["cutoffs"]
+                break
+
         elapsed = time.time() - start_time
         print(
-            f"  [{self.name}] depth={self._search_depth} | "
-            f"nodes={stats['nodes']:,} | cutoffs={stats['cutoffs']:,} | "
+            f"  [{self.name}] depth={completed_depth}/{self._search_depth} | "
+            f"nodes={total_stats['nodes']:,} | cutoffs={total_stats['cutoffs']:,} | "
             f"score={best_score:.4f} | time={elapsed:.2f}s"
         )
 

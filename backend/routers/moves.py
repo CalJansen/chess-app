@@ -19,6 +19,7 @@ engine_registry: dict = {}
 class MoveRequest(BaseModel):
     fen: str
     engine: str = "random"
+    time_limit: float = 5.0  # Max seconds for the engine to think
 
 
 class MoveResponse(BaseModel):
@@ -54,7 +55,8 @@ async def get_move(request: MoveRequest):
             detail=f"Unknown engine '{request.engine}'. Available: {available}"
         )
 
-    # Get the engine's move
+    # Set time limit and get the engine's move
+    engine.time_limit = request.time_limit
     try:
         move = engine.select_move(board)
     except Exception as e:

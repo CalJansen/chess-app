@@ -133,7 +133,15 @@ venv\Scripts\python.exe -u -m training.tournament --engines nn-chess_value_v1 mi
 
 # Verbose mode (show individual game results)
 venv\Scripts\python.exe -u -m training.tournament --engines nn-chess_value_v1 nn-chess_value_v2 --games 30 -v
+
+# Set time limit per move (default: 5 seconds)
+venv\Scripts\python.exe -u -m training.tournament --time-limit 3 --games 10
+
+# Disable saving sample games to disk
+venv\Scripts\python.exe -u -m training.tournament --no-save-games --games 10
 ```
+
+Tournament sample games are saved to `backend/data/tournament_games/` and can be replayed in the UI via the `/api/tournament-games` endpoint.
 
 ## AI Engines
 
