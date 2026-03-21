@@ -23,16 +23,18 @@ export interface EngineModel {
 export async function fetchAIMove(
   fen: string,
   engine: string,
-  timeoutMs: number = 10000
+  timeLimitSeconds: number = 5
 ): Promise<AIMove> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  // Client timeout = engine time limit + 5s buffer for network/overhead
+  const clientTimeoutMs = timeLimitSeconds * 1000 + 5000;
+  const timer = setTimeout(() => controller.abort(), clientTimeoutMs);
 
   try {
     const res = await fetch(`${API_BASE}/move`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fen, engine }),
+      body: JSON.stringify({ fen, engine, time_limit: timeLimitSeconds }),
       signal: controller.signal,
     });
 

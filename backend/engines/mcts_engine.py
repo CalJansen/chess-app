@@ -184,6 +184,7 @@ class MCTSEngine(ChessEngine):
     """
 
     def __init__(self, simulations: int = 800):
+        super().__init__()
         self._simulations = simulations
 
     @property
@@ -196,12 +197,18 @@ class MCTSEngine(ChessEngine):
 
     def select_move(self, board: chess.Board) -> chess.Move:
         start_time = time.time()
+        deadline = start_time + self.time_limit
 
         # Create the root node
         root = MCTSNode(board.copy())
 
-        # Run simulations
+        # Run simulations — stop at simulation limit OR time limit
+        sims_run = 0
         for i in range(self._simulations):
+            # Check time every 16 simulations to avoid syscall overhead
+            if i % 16 == 0 and i > 0 and time.time() > deadline:
+                break
+
             # 1. SELECT: find the most promising node to explore
             node = mcts_select(root)
 
@@ -214,6 +221,7 @@ class MCTSEngine(ChessEngine):
 
             # 4. BACKPROPAGATE: update statistics up the tree
             mcts_backpropagate(node, result)
+            sims_run = i + 1
 
         # Pick the move with the most visits (most robust)
         best_child = max(root.children, key=lambda c: c.visits)
@@ -221,7 +229,7 @@ class MCTSEngine(ChessEngine):
         elapsed = time.time() - start_time
 
         # Log statistics
-        print(f"  [mcts] simulations={self._simulations} | time={elapsed:.2f}s")
+        print(f"  [mcts] simulations={sims_run}/{self._simulations} | time={elapsed:.2f}s")
         # Show top 5 moves by visit count
         sorted_children = sorted(root.children, key=lambda c: c.visits, reverse=True)
         for child in sorted_children[:5]:

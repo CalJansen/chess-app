@@ -9,8 +9,25 @@ from abc import ABC, abstractmethod
 import chess
 
 
+class SearchTimeout(Exception):
+    """Raised when a search exceeds its time limit."""
+    pass
+
+
 class ChessEngine(ABC):
     """Base class for chess engines."""
+
+    def __init__(self):
+        self._time_limit = 5.0  # Default: 5 seconds per move
+
+    @property
+    def time_limit(self) -> float:
+        """Maximum seconds allowed per move."""
+        return self._time_limit
+
+    @time_limit.setter
+    def time_limit(self, value: float):
+        self._time_limit = max(0.1, value)  # Minimum 0.1s
 
     @property
     @abstractmethod

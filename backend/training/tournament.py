@@ -23,8 +23,11 @@ Usage:
 """
 
 import argparse
+import json
 import sys
 import time
+import uuid
+from datetime import datetime
 import chess
 
 # Add backend to path so we can import engines
@@ -65,10 +68,13 @@ def play_game(white_engine, black_engine, verbose=False):
     Play a single game between two engines.
 
     Returns:
-        "white" if white wins, "black" if black wins, "draw" for draws
+        dict with keys:
+            "result": "white" | "black" | "draw"
+            "moves": list of SAN move strings
     """
     board = chess.Board()
     move_count = 0
+    moves = []
 
     while not board.is_game_over() and move_count < MAX_MOVES * 2:
         if board.turn == chess.WHITE:
@@ -76,8 +82,10 @@ def play_game(white_engine, black_engine, verbose=False):
         else:
             move = black_engine.select_move(board)
 
+        san = board.san(move)
+        moves.append(san)
+
         if verbose and move_count < 10:
-            san = board.san(move)
             side = "W" if board.turn == chess.WHITE else "B"
             print(f"    {side}: {san}", end="")
 
@@ -88,10 +96,11 @@ def play_game(white_engine, black_engine, verbose=False):
         print()
 
     if board.is_checkmate():
-        # The side to move is checkmated
-        return "black" if board.turn == chess.WHITE else "white"
+        result = "black" if board.turn == chess.WHITE else "white"
     else:
-        return "draw"
+        result = "draw"
+
+    return {"result": result, "moves": moves}
 
 
 def run_match(engine_a, engine_b, num_games, verbose=False):
@@ -99,9 +108,15 @@ def run_match(engine_a, engine_b, num_games, verbose=False):
     Run a match between two engines, alternating colors.
 
     Returns dict with results from engine_a's perspective:
-        {"wins": int, "losses": int, "draws": int}
+        {"wins": int, "losses": int, "draws": int, "sample_game": dict|None}
+
+    sample_game is a randomly selected game from the match with full move history.
     """
     results = {"wins": 0, "losses": 0, "draws": 0}
+    # Pick a random game index to sample for replay
+    import random as _random
+    sample_index = _random.randint(0, num_games - 1) if num_games > 0 else 0
+    sample_game = None
 
     for i in range(num_games):
         # Alternate colors each game
@@ -117,12 +132,13 @@ def run_match(engine_a, engine_b, num_games, verbose=False):
                 else f"{engine_b.name}(W) vs {engine_a.name}(B)"
             print(f"  Game {i + 1}/{num_games}: {colors}", end=" ... ")
 
-        result = play_game(white, black)
+        game_data = play_game(white, black)
+        game_result = game_data["result"]
 
-        if result == a_color:
+        if game_result == a_color:
             results["wins"] += 1
             outcome = "WIN"
-        elif result == "draw":
+        elif game_result == "draw":
             results["draws"] += 1
             outcome = "DRAW"
         else:
@@ -132,10 +148,27 @@ def run_match(engine_a, engine_b, num_games, verbose=False):
         if verbose:
             print(outcome)
 
+        # Save the sampled game
+        if i == sample_index:
+            white_name = engine_a.name if a_color == "white" else engine_b.name
+            black_name = engine_b.name if a_color == "white" else engine_a.name
+            result_str = "1-0" if game_result == "white" else "0-1" if game_result == "black" else "1/2-1/2"
+            sample_game = {
+                "id": str(uuid.uuid4())[:8],
+                "date": datetime.now().isoformat(),
+                "moves": game_data["moves"],
+                "result": result_str,
+                "opening": "",
+                "whitePlayer": white_name,
+                "blackPlayer": black_name,
+            }
+
+    results["sample_game"] = sample_game
     return results
 
 
-def run_tournament(engine_names=None, num_games=10, verbose=False):
+def run_tournament(engine_names=None, num_games=10, verbose=False,
+                   time_limit=5.0, save_games=True):
     """
     Run a round-robin tournament between selected engines.
     """
@@ -151,8 +184,13 @@ def run_tournament(engine_names=None, num_games=10, verbose=False):
     else:
         engines = registry
 
+    # Set time limits on all engines
+    for engine in engines.values():
+        engine.time_limit = time_limit
+
     names = list(engines.keys())
-    print(f"Tournament: {len(names)} engines, {num_games} games per pairing")
+    print(f"Tournament: {len(names)} engines, {num_games} games per pairing, "
+          f"{time_limit}s time limit per move")
     print(f"Engines: {', '.join(names)}\n")
 
     # Track overall standings: {name: {"wins": 0, "losses": 0, "draws": 0, "points": 0}}
@@ -161,6 +199,7 @@ def run_tournament(engine_names=None, num_games=10, verbose=False):
 
     # Results table for head-to-head display
     h2h = {}
+    saved_games = []  # Sampled games for replay
 
     total_pairings = len(names) * (len(names) - 1) // 2
     pairing_num = 0
@@ -193,6 +232,10 @@ def run_tournament(engine_names=None, num_games=10, verbose=False):
             standings[b_name]["points"] += b_points
 
             h2h[(a_name, b_name)] = result
+
+            # Collect sample game for replay
+            if result.get("sample_game"):
+                saved_games.append(result["sample_game"])
 
             print(f"  Result: {a_name} {result['wins']}W-{result['draws']}D-{result['losses']}L "
                   f"({a_points:.1f}-{b_points:.1f}) | {elapsed:.1f}s\n")
@@ -247,6 +290,16 @@ def run_tournament(engine_names=None, num_games=10, verbose=False):
                 print(f"{cell:>{col_w}}", end="")
             print()
 
+    # Save sampled games to disk for replay
+    if save_games and saved_games:
+        games_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "tournament_games")
+        os.makedirs(games_dir, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        games_file = os.path.join(games_dir, f"tournament_{timestamp}.json")
+        with open(games_file, "w") as f:
+            json.dump(saved_games, f, indent=2)
+        print(f"\nSaved {len(saved_games)} sample games to {games_file}")
+
 
 def main():
     parser = argparse.ArgumentParser(description="Run engine tournament")
@@ -258,6 +311,10 @@ def main():
                         help="Show individual game results")
     parser.add_argument("--list", action="store_true",
                         help="List available engines and exit")
+    parser.add_argument("--time-limit", type=float, default=5.0,
+                        help="Max seconds per move (default: 5.0)")
+    parser.add_argument("--no-save-games", action="store_true",
+                        help="Don't save sample games to disk")
     args = parser.parse_args()
 
     if args.list:
@@ -267,7 +324,9 @@ def main():
             print(f"  {name:<25} [{engine.engine_type}] {engine.description}")
         return
 
-    run_tournament(args.engines, args.games, args.verbose)
+    run_tournament(args.engines, args.games, args.verbose,
+                   time_limit=args.time_limit,
+                   save_games=not args.no_save_games)
 
 
 if __name__ == "__main__":
