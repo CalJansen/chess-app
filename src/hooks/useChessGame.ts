@@ -241,12 +241,19 @@ export function useChessGame(options?: { autoFlip?: boolean }) {
     setBoardOrientation((prev) => (prev === "white" ? "black" : "white"));
   }, []);
 
-  const newGame = useCallback(() => {
+  const newGame = useCallback((startingMoves?: string[]) => {
     game.reset();
+    if (startingMoves) {
+      for (const san of startingMoves) {
+        try { game.move(san); } catch { break; }
+      }
+    }
     setLastMoveType(null);
     setRedoStack([]);
     syncState();
-    clearGame();
+    if (!startingMoves) {
+      clearGame();
+    }
   }, [game, syncState]);
 
   const turn = game.turn() === "w" ? "white" : "black";

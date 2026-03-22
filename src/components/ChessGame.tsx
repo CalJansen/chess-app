@@ -9,6 +9,7 @@ import { useChessClock } from "@/hooks/useChessClock";
 import { useStockfishEval } from "@/hooks/useStockfishEval";
 import { useGameReview } from "@/hooks/useGameReview";
 import { usePuzzle } from "@/hooks/usePuzzle";
+import { useOpeningExplorer } from "@/hooks/useOpeningExplorer";
 import { useAppMode } from "@/contexts/AppModeContext";
 import { saveCompletedGame } from "@/utils/gameHistory";
 import { findOpening } from "@/utils/openings";
@@ -39,6 +40,7 @@ export default function ChessGame() {
   const clock = useChessClock();
   const review = useGameReview();
   const puzzle = usePuzzle();
+  const explorer = useOpeningExplorer();
 
   const {
     fen,
@@ -196,6 +198,16 @@ export default function ChessGame() {
     [replay]
   );
 
+  const handleStartFromOpening = useCallback(() => {
+    const moves = explorer.getStartingMoves();
+    newGame(moves);
+    clock.resetClock();
+    setGameEndSaved(false);
+    setHintArrow(null);
+    review.clearReview();
+    setMode("play");
+  }, [explorer, newGame, clock, review, setMode]);
+
   const handleReview = useCallback(() => {
     if (moveHistory.length > 0) {
       replay.startReplay(moveHistory,
@@ -321,8 +333,9 @@ export default function ChessGame() {
 
   // Board config based on mode
   const displayFen = isPuzzleMode ? puzzle.fen
+    : isExplorerMode ? explorer.currentFen
     : (isPlayMode || isHistoryMode) ? playDisplayFen
-    : fen; // explorer will use its own FEN later
+    : fen;
 
   const displayOrientation = isPuzzleMode ? puzzleBoardSide
     : (isPlayMode || isHistoryMode) ? playDisplayOrientation
@@ -333,19 +346,23 @@ export default function ChessGame() {
   const playBoardDisabled = replay.isActive || isAITurn || ai.aiThinking;
 
   const boardSquareStyles = isPuzzleMode ? puzzleSquareStyles
+    : isExplorerMode ? explorer.squareStyles
     : (isPlayMode && !playBoardDisabled) ? squareStyles
     : {};
 
   const boardOnSquareClick = isPuzzleMode ? handlePuzzleSquareClick
+    : isExplorerMode ? explorer.onSquareClick
     : (isPlayMode && !playBoardDisabled) ? onSquareClick
     : () => {};
 
   const boardOnPieceDrop = isPuzzleMode ? handlePuzzlePieceDrop
+    : isExplorerMode ? explorer.onPieceDrop
     : (isPlayMode && !playBoardDisabled) ? onPieceDrop
     : () => false;
 
   const boardOnPieceDragBegin = isPuzzleMode
     ? ((square: string) => { puzzle.selectSquare(square); })
+    : isExplorerMode ? explorer.onPieceDragBegin
     : (isPlayMode && !playBoardDisabled) ? onPieceDragBegin
     : () => {};
 
@@ -447,7 +464,10 @@ export default function ChessGame() {
           )}
 
           {isExplorerMode && (
-            <ExplorerPanel />
+            <ExplorerPanel
+              explorer={explorer}
+              onStartFromHere={handleStartFromOpening}
+            />
           )}
         </div>
 
