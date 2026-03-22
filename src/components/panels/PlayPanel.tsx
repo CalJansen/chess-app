@@ -54,7 +54,7 @@ export default function PlayPanel({
       <MoveHistory
         history={isReplaying ? replayMoves : moveHistory}
         currentMoveIndex={isReplaying ? replayCurrentIndex : undefined}
-        onMoveClick={isReplaying ? onMoveClick : undefined}
+        onMoveClick={onMoveClick}
         reviewAnalysis={reviewStatus === "done" ? reviewAnalysis ?? undefined : undefined}
       />
 
