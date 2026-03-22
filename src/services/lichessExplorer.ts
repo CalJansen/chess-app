@@ -1,12 +1,12 @@
 /**
  * Lichess Opening Explorer API client.
  *
- * Uses the public Lichess API (no auth required, ~1 req/sec rate limit).
+ * Proxies requests through our backend which handles authentication.
  * Results are cached in memory to avoid redundant calls as users
  * navigate back and forth through openings.
  */
 
-const LICHESS_EXPLORER_URL = "https://explorer.lichess.org/lichess";
+const EXPLORER_API_URL = "http://localhost:8000/api/explorer";
 
 export interface ExplorerMove {
   uci: string;
@@ -55,7 +55,7 @@ export async function fetchExplorerStats(
       ratings: ratings.join(","),
     });
 
-    const res = await fetch(`${LICHESS_EXPLORER_URL}?${params}`);
+    const res = await fetch(`${EXPLORER_API_URL}?${params}`);
 
     // If a newer request was started, discard this result
     if (requestId !== latestRequestId) return null;
