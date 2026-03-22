@@ -229,9 +229,20 @@ export default function ChessGame() {
     }
   }, [moveHistory.length]);
 
+  const handlePlayStartClick = useCallback(() => {
+    if (moveHistory.length > 0) {
+      setRewindTarget(-1); // -1 means rewind to start (undo all)
+    }
+  }, [moveHistory.length]);
+
   const confirmRewind = useCallback(() => {
     if (rewindTarget !== null) {
-      gameGoToMove(rewindTarget);
+      if (rewindTarget === -1) {
+        // Rewind to start: undo all moves
+        gameGoToMove(-1);
+      } else {
+        gameGoToMove(rewindTarget);
+      }
       setRewindTarget(null);
     }
   }, [rewindTarget, gameGoToMove]);
@@ -453,6 +464,7 @@ export default function ChessGame() {
               replayMoves={replay.moves}
               replayCurrentIndex={replay.currentIndex}
               onMoveClick={replay.isActive ? replay.goToMove : handlePlayMoveClick}
+              onStartClick={replay.isActive ? replay.goToStart : handlePlayStartClick}
               status={timeoutMessage || getStatus()}
               isGameOver={isGameOver || !!timeoutMessage}
               inCheck={inCheck}
@@ -613,15 +625,29 @@ export default function ChessGame() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="bg-gray-800 border border-gray-600 rounded-xl p-6 shadow-2xl max-w-sm mx-4 text-center">
             <h3 className="text-white text-lg font-semibold mb-2">Rewind Game?</h3>
-            <p className="text-gray-300 text-sm mb-1">
-              Go back to move {Math.floor(rewindTarget / 2) + 1}
-              {rewindTarget % 2 === 0 ? "." : "..."}{" "}
-              <span className="font-mono font-bold">{moveHistory[rewindTarget]}</span>
-            </p>
-            <p className="text-gray-400 text-xs mb-5">
-              {moveHistory.length - rewindTarget - 1} move{moveHistory.length - rewindTarget - 1 !== 1 ? "s" : ""} will
-              be undone (available in redo).
-            </p>
+            {rewindTarget === -1 ? (
+              <>
+                <p className="text-gray-300 text-sm mb-1">
+                  Go back to the <span className="font-bold">starting position</span>
+                </p>
+                <p className="text-gray-400 text-xs mb-5">
+                  All {moveHistory.length} move{moveHistory.length !== 1 ? "s" : ""} will
+                  be undone (available in redo).
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-gray-300 text-sm mb-1">
+                  Go back to move {Math.floor(rewindTarget / 2) + 1}
+                  {rewindTarget % 2 === 0 ? "." : "..."}{" "}
+                  <span className="font-mono font-bold">{moveHistory[rewindTarget]}</span>
+                </p>
+                <p className="text-gray-400 text-xs mb-5">
+                  {moveHistory.length - rewindTarget - 1} move{moveHistory.length - rewindTarget - 1 !== 1 ? "s" : ""} will
+                  be undone (available in redo).
+                </p>
+              </>
+            )}
             <div className="flex gap-3 justify-center">
               <button
                 onClick={cancelRewind}
