@@ -237,6 +237,22 @@ export function useChessGame(options?: { autoFlip?: boolean }) {
     }
   }, [game, redoStack, syncState]);
 
+  /** Rewind the live game to after the move at `index`. Removed moves go to redo stack. */
+  const goToMove = useCallback((index: number) => {
+    const currentLength = game.history().length;
+    const movesToUndo = currentLength - (index + 1);
+    if (movesToUndo <= 0) return;
+
+    const undone: string[] = [];
+    for (let i = 0; i < movesToUndo; i++) {
+      const move = game.undo();
+      if (move) undone.unshift(move.san);
+    }
+    setRedoStack(undone);
+    setLastMoveType(null);
+    syncState();
+  }, [game, syncState]);
+
   const flipBoard = useCallback(() => {
     setBoardOrientation((prev) => (prev === "white" ? "black" : "white"));
   }, []);
@@ -323,6 +339,7 @@ export function useChessGame(options?: { autoFlip?: boolean }) {
     makeMoveFromSAN,
     undoMove,
     redoMove,
+    goToMove,
     canRedo: redoStack.length > 0,
     flipBoard,
     newGame,

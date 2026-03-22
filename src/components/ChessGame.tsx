@@ -63,6 +63,7 @@ export default function ChessGame() {
     undoMove,
     redoMove,
     canRedo,
+    goToMove: gameGoToMove,
     flipBoard,
     newGame,
   } = chessGame;
@@ -218,16 +219,26 @@ export default function ChessGame() {
     }
   }, [moveHistory, replay, review, ai.aiEnabled, ai.playerColor, ai.selectedEngine, playerName]);
 
-  // Click a move in the play tab's move history to jump to that position
+  // Click a move in the play tab's move history — show confirmation to rewind
+  const [rewindTarget, setRewindTarget] = useState<number | null>(null);
+
   const handlePlayMoveClick = useCallback((index: number) => {
-    if (moveHistory.length === 0) return;
-    replay.startReplay(moveHistory,
-      ai.aiEnabled && ai.playerColor === "black" ? ai.selectedEngine : playerName,
-      ai.aiEnabled && ai.playerColor === "white" ? ai.selectedEngine : (ai.aiEnabled ? playerName : "Player 2"),
-    );
-    // Jump to the clicked move after entering replay mode
-    replay.goToMove(index);
-  }, [moveHistory, replay, ai.aiEnabled, ai.playerColor, ai.selectedEngine, playerName]);
+    // Only offer rewind if clicking a move before the last one
+    if (index < moveHistory.length - 1) {
+      setRewindTarget(index);
+    }
+  }, [moveHistory.length]);
+
+  const confirmRewind = useCallback(() => {
+    if (rewindTarget !== null) {
+      gameGoToMove(rewindTarget);
+      setRewindTarget(null);
+    }
+  }, [rewindTarget, gameGoToMove]);
+
+  const cancelRewind = useCallback(() => {
+    setRewindTarget(null);
+  }, []);
 
   // ── Puzzle board config ──
   const [puzzleBoardSide, setPuzzleBoardSide] = useState<"white" | "black">("white");
@@ -596,6 +607,38 @@ export default function ChessGame() {
           )}
         </div>
       </div>
+
+      {/* Rewind confirmation modal */}
+      {rewindTarget !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-gray-800 border border-gray-600 rounded-xl p-6 shadow-2xl max-w-sm mx-4 text-center">
+            <h3 className="text-white text-lg font-semibold mb-2">Rewind Game?</h3>
+            <p className="text-gray-300 text-sm mb-1">
+              Go back to move {Math.floor(rewindTarget / 2) + 1}
+              {rewindTarget % 2 === 0 ? "." : "..."}{" "}
+              <span className="font-mono font-bold">{moveHistory[rewindTarget]}</span>
+            </p>
+            <p className="text-gray-400 text-xs mb-5">
+              {moveHistory.length - rewindTarget - 1} move{moveHistory.length - rewindTarget - 1 !== 1 ? "s" : ""} will
+              be undone (available in redo).
+            </p>
+            <div className="flex gap-3 justify-center">
+              <button
+                onClick={cancelRewind}
+                className="px-5 py-2 rounded-lg bg-gray-600 hover:bg-gray-500 text-white text-sm font-medium transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmRewind}
+                className="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors"
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
