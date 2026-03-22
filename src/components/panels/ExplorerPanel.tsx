@@ -41,32 +41,41 @@ function formatGames(n: number): string {
 export default function ExplorerPanel({ explorer, onStartFromHere }: ExplorerPanelProps) {
   const { theme } = useTheme();
 
-  // Merge tree children with Lichess stats for move display
+  // Merge tree children with Lichess stats, sorted by most common moves
   const movesWithStats: {
     san: string;
     openingName?: string;
     eco?: string;
     lichess?: ExplorerMove;
+    totalGames: number;
   }[] = [];
 
-  // Start with Lichess moves if available (they come sorted by popularity)
   if (explorer.lichessStats) {
+    // Build a map of Lichess moves for quick lookup
+    const lichessMap = new Map(explorer.lichessStats.moves.map(m => [m.san, m]));
+
+    // Merge both sources
+    const seen = new Set<string>();
     for (const lm of explorer.lichessStats.moves) {
       const treeChild = explorer.treeChildren.find(c => c.move === lm.san);
+      const total = lm.white + lm.draws + lm.black;
       movesWithStats.push({
         san: lm.san,
         openingName: treeChild?.name,
         eco: treeChild?.eco,
         lichess: lm,
+        totalGames: total,
       });
+      seen.add(lm.san);
     }
-    // Add tree children not in Lichess results
+    // Add tree children not in Lichess results (at the bottom, 0 games)
     for (const tc of explorer.treeChildren) {
-      if (!movesWithStats.find(m => m.san === tc.move)) {
+      if (!seen.has(tc.move)) {
         movesWithStats.push({
           san: tc.move,
           openingName: tc.name,
           eco: tc.eco,
+          totalGames: 0,
         });
       }
     }
@@ -77,9 +86,13 @@ export default function ExplorerPanel({ explorer, onStartFromHere }: ExplorerPan
         san: tc.move,
         openingName: tc.name,
         eco: tc.eco,
+        totalGames: 0,
       });
     }
   }
+
+  // Sort by most common (highest game count first)
+  movesWithStats.sort((a, b) => b.totalGames - a.totalGames);
 
   // Overall position stats
   const posStats = explorer.lichessStats;

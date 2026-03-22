@@ -6,7 +6,7 @@
  * navigate back and forth through openings.
  */
 
-const LICHESS_EXPLORER_URL = "https://explorer.lichess.ovh/lichess";
+const LICHESS_EXPLORER_URL = "https://explorer.lichess.org/lichess";
 
 export interface ExplorerMove {
   uci: string;
