@@ -1,6 +1,7 @@
 "use client";
 
 import { useTheme } from "@/contexts/ThemeContext";
+import MoveHistory from "@/components/MoveHistory";
 import type { ExplorerState } from "@/hooks/useOpeningExplorer";
 import type { ExplorerMove } from "@/services/lichessExplorer";
 import type { OpeningTreeNode } from "@/utils/openingsTree";
@@ -127,41 +128,15 @@ export default function ExplorerPanel({ explorer, onStartFromHere }: ExplorerPan
         )}
       </div>
 
-      {/* Breadcrumb trail */}
-      <div className={`${theme.panel} rounded-lg p-3 border ${theme.panelBorder}`}>
-        <div className="flex flex-wrap items-center gap-1 text-xs">
-          <button
-            onClick={explorer.goToStart}
-            className={`px-1.5 py-0.5 rounded ${
-              explorer.currentMoves.length === 0
-                ? "bg-blue-600 text-white"
-                : `${theme.textMuted} hover:bg-white/10`
-            } transition-colors`}
-          >
-            Start
-          </button>
-          {explorer.currentMoves.map((move, i) => {
-            const isWhite = i % 2 === 0;
-            const moveNum = Math.floor(i / 2) + 1;
-            const isLast = i === explorer.currentMoves.length - 1;
-            return (
-              <span key={i} className="flex items-center gap-0.5">
-                <span className={theme.textMuted}>&rsaquo;</span>
-                <button
-                  onClick={() => explorer.goToMove(i)}
-                  className={`px-1.5 py-0.5 rounded ${
-                    isLast
-                      ? "bg-blue-600 text-white"
-                      : `${theme.textSecondary} hover:bg-white/10`
-                  } transition-colors`}
-                >
-                  {isWhite ? `${moveNum}.` : `${moveNum}...`}{move}
-                </button>
-              </span>
-            );
-          })}
-        </div>
-      </div>
+      {/* Move history breadcrumb trail */}
+      <MoveHistory
+        history={explorer.currentMoves}
+        currentMoveIndex={explorer.currentMoves.length > 0 ? explorer.currentMoves.length - 1 : undefined}
+        onMoveClick={(i) => explorer.goToMove(i)}
+        showStart
+        onStartClick={explorer.goToStart}
+        label="Move History"
+      />
 
       {/* Current opening name */}
       {explorer.currentOpening && (

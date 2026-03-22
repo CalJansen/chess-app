@@ -8,8 +8,13 @@ import type { MoveAnalysis } from "@/services/api";
 interface MoveHistoryProps {
   history: string[];
   currentMoveIndex?: number; // for replay mode highlighting
-  onMoveClick?: (index: number) => void; // for replay mode navigation
+  onMoveClick?: (index: number) => void; // for replay/navigation
   reviewAnalysis?: MoveAnalysis[]; // optional review data for color-coding moves
+  /** Show a "Start" button at the beginning of the breadcrumb trail */
+  showStart?: boolean;
+  onStartClick?: () => void;
+  /** Label above the panel */
+  label?: string;
 }
 
 export default function MoveHistory({
@@ -17,6 +22,9 @@ export default function MoveHistory({
   currentMoveIndex,
   onMoveClick,
   reviewAnalysis,
+  showStart = false,
+  onStartClick,
+  label = "Move History",
 }: MoveHistoryProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const { theme } = useTheme();
@@ -25,7 +33,6 @@ export default function MoveHistory({
   useEffect(() => {
     if (!containerRef.current) return;
     if (currentMoveIndex !== undefined && currentMoveIndex >= 0) {
-      // Scroll to keep the current move visible
       const moveEl = containerRef.current.querySelector(`[data-move-index="${currentMoveIndex}"]`);
       if (moveEl) {
         moveEl.scrollIntoView({ block: "nearest", behavior: "smooth" });
@@ -35,36 +42,16 @@ export default function MoveHistory({
     }
   }, [history.length, currentMoveIndex]);
 
-  // Group moves into pairs (1. e4 e5, 2. Nf3 Nc6, ...)
-  const pairs: { num: number; white: string; black?: string; whiteIndex: number; blackIndex: number }[] = [];
-  for (let i = 0; i < history.length; i += 2) {
-    pairs.push({
-      num: Math.floor(i / 2) + 1,
-      white: history[i],
-      black: history[i + 1],
-      whiteIndex: i,
-      blackIndex: i + 1,
-    });
-  }
-
   const isClickable = !!onMoveClick;
 
-  const moveClass = (moveIndex: number) => {
-    const isHighlighted = currentMoveIndex !== undefined && moveIndex === currentMoveIndex;
-    const clickable = isClickable ? "cursor-pointer hover:underline" : "";
-    const highlight = isHighlighted ? "bg-blue-600/40 rounded px-1" : "";
-
-    // Color-code based on review classification
-    let classColor = theme.textSecondary;
+  // Get review color for a move
+  const getMoveColor = (moveIndex: number): string | undefined => {
     if (reviewAnalysis && moveIndex < reviewAnalysis.length) {
       const cls = reviewAnalysis[moveIndex].classification;
       const style = CLASSIFICATION_STYLES[cls];
-      if (style) {
-        classColor = style.color;
-      }
+      if (style) return style.color;
     }
-
-    return `${classColor} ${clickable} ${highlight}`;
+    return undefined;
   };
 
   // Get classification symbol suffix
@@ -75,43 +62,76 @@ export default function MoveHistory({
     return style?.symbol || "";
   };
 
+  // Get tooltip for a move
+  const getTitle = (moveIndex: number): string | undefined => {
+    if (!reviewAnalysis || moveIndex >= reviewAnalysis.length) return undefined;
+    const a = reviewAnalysis[moveIndex];
+    const style = CLASSIFICATION_STYLES[a.classification];
+    return `${style?.label} (${a.score_loss > 0 ? `-${a.score_loss} cp` : "best"})`;
+  };
+
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <h3 className={`text-sm font-semibold ${theme.textMuted} uppercase tracking-wide mb-2`}>
-        Move History
+        {label}
       </h3>
-      <div ref={containerRef} className={`flex-1 overflow-y-auto ${theme.panel} rounded-lg p-3 min-h-[120px] max-h-[300px]`}>
-        {pairs.length === 0 ? (
+      <div
+        ref={containerRef}
+        className={`flex-1 overflow-y-auto ${theme.panel} rounded-lg p-3 min-h-[120px] max-h-[300px]`}
+      >
+        {history.length === 0 && !showStart ? (
           <p className={`${theme.textMuted} text-sm italic`}>No moves yet</p>
         ) : (
-          <div className="space-y-1">
-            {pairs.map((pair) => (
-              <div key={pair.num} className="flex text-sm font-mono">
-                <span className={`${theme.textMuted} w-8 shrink-0`}>{pair.num}.</span>
-                <span
-                  data-move-index={pair.whiteIndex}
-                  className={`w-20 ${moveClass(pair.whiteIndex)}`}
-                  onClick={() => onMoveClick?.(pair.whiteIndex)}
-                  title={reviewAnalysis?.[pair.whiteIndex]
-                    ? `${CLASSIFICATION_STYLES[reviewAnalysis[pair.whiteIndex].classification]?.label} (${reviewAnalysis[pair.whiteIndex].score_loss > 0 ? `-${reviewAnalysis[pair.whiteIndex].score_loss} cp` : "best"})`
-                    : undefined}
-                >
-                  {pair.white}{getSymbol(pair.whiteIndex)}
-                </span>
-                {pair.black && (
-                  <span
-                    data-move-index={pair.blackIndex}
-                    className={`${moveClass(pair.blackIndex)}`}
-                    onClick={() => onMoveClick?.(pair.blackIndex)}
-                    title={reviewAnalysis?.[pair.blackIndex]
-                      ? `${CLASSIFICATION_STYLES[reviewAnalysis[pair.blackIndex].classification]?.label} (${reviewAnalysis[pair.blackIndex].score_loss > 0 ? `-${reviewAnalysis[pair.blackIndex].score_loss} cp` : "best"})`
-                      : undefined}
+          <div className="flex flex-wrap items-center gap-1 text-xs font-mono">
+            {/* Optional Start button */}
+            {showStart && (
+              <button
+                onClick={onStartClick}
+                className={`px-1.5 py-0.5 rounded ${
+                  history.length === 0 && currentMoveIndex === undefined
+                    ? "bg-blue-600 text-white"
+                    : `${theme.textMuted} hover:bg-white/10`
+                } transition-colors`}
+              >
+                Start
+              </button>
+            )}
+
+            {history.map((move, i) => {
+              const isWhite = i % 2 === 0;
+              const moveNum = Math.floor(i / 2) + 1;
+              const isHighlighted = currentMoveIndex !== undefined && i === currentMoveIndex;
+              const isLatest = currentMoveIndex === undefined && i === history.length - 1;
+              const moveColor = getMoveColor(i);
+
+              return (
+                <span key={i} className="flex items-center gap-0.5">
+                  {/* Move number */}
+                  {isWhite && (
+                    <span className={`${theme.textMuted} mr-0.5`}>{moveNum}.</span>
+                  )}
+                  {/* Black move after separator in explorer breadcrumb style */}
+                  {!isWhite && showStart && (
+                    <span className={theme.textMuted}>&rsaquo;</span>
+                  )}
+                  <button
+                    data-move-index={i}
+                    onClick={() => onMoveClick?.(i)}
+                    title={getTitle(i)}
+                    className={`px-1.5 py-0.5 rounded transition-colors ${
+                      isHighlighted || isLatest
+                        ? "bg-blue-600 text-white"
+                        : isClickable
+                        ? `${moveColor || theme.textSecondary} hover:bg-white/10 cursor-pointer`
+                        : `${moveColor || theme.textSecondary}`
+                    }`}
+                    disabled={!isClickable}
                   >
-                    {pair.black}{getSymbol(pair.blackIndex)}
-                  </span>
-                )}
-              </div>
-            ))}
+                    {move}{getSymbol(i)}
+                  </button>
+                </span>
+              );
+            })}
           </div>
         )}
       </div>
