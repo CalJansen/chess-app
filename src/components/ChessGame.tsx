@@ -218,6 +218,17 @@ export default function ChessGame() {
     }
   }, [moveHistory, replay, review, ai.aiEnabled, ai.playerColor, ai.selectedEngine, playerName]);
 
+  // Click a move in the play tab's move history to jump to that position
+  const handlePlayMoveClick = useCallback((index: number) => {
+    if (moveHistory.length === 0) return;
+    replay.startReplay(moveHistory,
+      ai.aiEnabled && ai.playerColor === "black" ? ai.selectedEngine : playerName,
+      ai.aiEnabled && ai.playerColor === "white" ? ai.selectedEngine : (ai.aiEnabled ? playerName : "Player 2"),
+    );
+    // Jump to the clicked move after entering replay mode
+    replay.goToMove(index);
+  }, [moveHistory, replay, ai.aiEnabled, ai.playerColor, ai.selectedEngine, playerName]);
+
   // ── Puzzle board config ──
   const [puzzleBoardSide, setPuzzleBoardSide] = useState<"white" | "black">("white");
   useEffect(() => {
@@ -430,7 +441,7 @@ export default function ChessGame() {
               isReplaying={replay.isActive}
               replayMoves={replay.moves}
               replayCurrentIndex={replay.currentIndex}
-              onMoveClick={replay.isActive ? replay.goToMove : undefined}
+              onMoveClick={replay.isActive ? replay.goToMove : handlePlayMoveClick}
               status={timeoutMessage || getStatus()}
               isGameOver={isGameOver || !!timeoutMessage}
               inCheck={inCheck}
