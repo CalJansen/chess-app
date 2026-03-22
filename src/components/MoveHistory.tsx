@@ -82,42 +82,40 @@ export default function MoveHistory({
         {history.length === 0 && !showStart ? (
           <p className={`${theme.textMuted} text-sm italic`}>No moves yet</p>
         ) : (
-          <div className="flex flex-wrap items-center gap-1 text-xs font-mono">
-            {/* Optional Start button */}
+          <div className="flex flex-col gap-1 text-xs font-mono">
+            {/* Start button on its own line */}
             {showStart && (
-              <button
-                onClick={onStartClick}
-                className={`px-1.5 py-0.5 rounded ${
-                  history.length === 0 && currentMoveIndex === undefined
-                    ? "bg-blue-600 text-white"
-                    : `${theme.textMuted} hover:bg-white/10`
-                } transition-colors`}
-              >
-                Start
-              </button>
+              <div>
+                <button
+                  onClick={onStartClick}
+                  className={`px-1.5 py-0.5 rounded ${
+                    history.length === 0 && currentMoveIndex === undefined
+                      ? "bg-blue-600 text-white"
+                      : `${theme.textMuted} hover:bg-white/10`
+                  } transition-colors`}
+                >
+                  Start
+                </button>
+              </div>
             )}
 
-            {history.map((move, i) => {
-              const isWhite = i % 2 === 0;
-              const moveNum = Math.floor(i / 2) + 1;
-              const isHighlighted = currentMoveIndex !== undefined && i === currentMoveIndex;
-              const isLatest = currentMoveIndex === undefined && i === history.length - 1;
-              const moveColor = getMoveColor(i);
+            {/* One row per turn (white + black pair) */}
+            {Array.from({ length: Math.ceil(history.length / 2) }, (_, pairIdx) => {
+              const whiteIdx = pairIdx * 2;
+              const blackIdx = pairIdx * 2 + 1;
+              const moveNum = pairIdx + 1;
 
-              return (
-                <span key={i} className="flex items-center gap-0.5">
-                  {/* Move number */}
-                  {isWhite && (
-                    <span className={`${theme.textMuted} mr-0.5`}>{moveNum}.</span>
-                  )}
-                  {/* Black move after separator in explorer breadcrumb style */}
-                  {!isWhite && showStart && (
-                    <span className={theme.textMuted}>&rsaquo;</span>
-                  )}
+              const renderMove = (idx: number) => {
+                if (idx >= history.length) return null;
+                const isHighlighted = currentMoveIndex !== undefined && idx === currentMoveIndex;
+                const isLatest = currentMoveIndex === undefined && idx === history.length - 1;
+                const moveColor = getMoveColor(idx);
+
+                return (
                   <button
-                    data-move-index={i}
-                    onClick={() => onMoveClick?.(i)}
-                    title={getTitle(i)}
+                    data-move-index={idx}
+                    onClick={() => onMoveClick?.(idx)}
+                    title={getTitle(idx)}
                     className={`px-1.5 py-0.5 rounded transition-colors ${
                       isHighlighted || isLatest
                         ? "bg-blue-600 text-white"
@@ -127,9 +125,19 @@ export default function MoveHistory({
                     }`}
                     disabled={!isClickable}
                   >
-                    {move}{getSymbol(i)}
+                    {history[idx]}{getSymbol(idx)}
                   </button>
-                </span>
+                );
+              };
+
+              return (
+                <div key={pairIdx} className="flex items-center gap-1">
+                  <span className={`${theme.textMuted} w-6 shrink-0 text-right`}>{moveNum}.</span>
+                  <span className="w-16 shrink-0">{renderMove(whiteIdx)}</span>
+                  {blackIdx < history.length && (
+                    <span>{renderMove(blackIdx)}</span>
+                  )}
+                </div>
               );
             })}
           </div>
