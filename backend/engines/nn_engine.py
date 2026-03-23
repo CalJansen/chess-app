@@ -30,8 +30,7 @@ import numpy as np
 import chess
 
 from .base import ChessEngine, SearchTimeout
-from .nn_model import ChessValueNetwork
-from .nn_model_v2 import ChessValueNetworkV2
+from .nn_model import ChessValueNetwork, ChessValueNetworkV2
 from training.board_encoding import encode_board
 from training.board_encoding_v2 import encode_board_v2
 
@@ -53,33 +52,39 @@ class NNEngine(ChessEngine):
         self._model_name = os.path.splitext(os.path.basename(model_path))[0]
         self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        # Load the trained model — detect V1 vs V2 architecture
-        checkpoint = torch.load(model_path, weights_only=False, map_location=self._device)
-        self._architecture = checkpoint.get("architecture", "v1")
+        # Load the trained model — detect architecture from checkpoint metadata
+        checkpoint = torch.load(model_path, weights_only=True, map_location=self._device)
 
-        if self._architecture == "v2":
+        arch = checkpoint.get("architecture", "v1")
+        input_planes = checkpoint.get("input_planes", 18)
+        num_blocks = checkpoint.get("num_blocks", 4)
+        num_filters = checkpoint.get("num_filters", 64)
+
+        if arch == "v2":
             self._model = ChessValueNetworkV2(
-                input_planes=checkpoint.get("input_planes", 26),
-                num_blocks=checkpoint.get("num_blocks", 6),
-                num_filters=checkpoint.get("num_filters", 128),
+                num_blocks=num_blocks,
+                num_filters=num_filters,
+                input_planes=input_planes,
                 se_reduction=checkpoint.get("se_reduction", 4),
                 dropout=checkpoint.get("dropout", 0.1),
             ).to(self._device)
             self._encode_fn = encode_board_v2
         else:
             self._model = ChessValueNetwork(
-                num_blocks=checkpoint.get("num_blocks", 4),
-                num_filters=checkpoint.get("num_filters", 64),
+                num_blocks=num_blocks,
+                num_filters=num_filters,
+                input_planes=input_planes,
             ).to(self._device)
             self._encode_fn = encode_board
 
         self._model.load_state_dict(checkpoint["model_state_dict"])
         self._model.eval()
 
+        self._arch = arch
         self._val_loss = checkpoint.get("best_val_loss", None)
         self._train_positions = checkpoint.get("train_positions", None)
 
-        print(f"  Loaded NN model: {self._model_name} (arch={self._architecture}, device={self._device})")
+        print(f"  Loaded NN model: {self._model_name} (arch={arch}, planes={input_planes}, device={self._device})")
 
     @property
     def name(self) -> str:
@@ -87,7 +92,8 @@ class NNEngine(ChessEngine):
 
     @property
     def description(self) -> str:
-        desc = f"Neural network engine ({self._model_name}), minimax depth {self._search_depth}"
+        arch_label = "SE-ResNet v2" if self._arch == "v2" else "ResNet v1"
+        desc = f"Neural network ({arch_label}), minimax depth {self._search_depth}"
         if self._train_positions:
             desc += f", trained on {self._train_positions:,} positions"
         return desc
@@ -111,9 +117,9 @@ class NNEngine(ChessEngine):
         if board.is_stalemate() or board.is_insufficient_material():
             return 0.0
 
-        # Encode and evaluate
+        # Encode and evaluate (uses v1 or v2 encoding based on model architecture)
         encoded = self._encode_fn(board)
-        tensor = torch.from_numpy(encoded).unsqueeze(0).to(self._device)
+        tensor = torch.from_numpy(encoded).unsqueeze(0).to(self._device)  # (1, 18, 8, 8)
 
         with torch.no_grad():
             value = self._model(tensor).item()
