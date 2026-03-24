@@ -347,7 +347,10 @@ Examples:
     # Data source
     parser.add_argument("--pgn", default=os.path.join(DATA_DIR, "lichess_games.pgn"))
     parser.add_argument("--labeled-data", default=None,
-                        help="Pre-labeled .pt file (skip extraction + Stockfish)")
+                        help="Pre-labeled .pt file (skip extraction + Stockfish). "
+                             "If not specified, auto-detects cached data at --save-labeled path.")
+    parser.add_argument("--fresh-data", action="store_true",
+                        help="Force re-extraction and re-labeling even if cached data exists")
     parser.add_argument("--max-games", type=int, default=5000)
     parser.add_argument("--sample-rate", type=float, default=0.25)
 
@@ -379,10 +382,25 @@ Examples:
 
     labeled_data_path = args.save_labeled
 
+    # Determine whether to use cached labeled data:
+    # 1. Explicit --labeled-data path always wins
+    # 2. Auto-detect cached data at --save-labeled path (unless --fresh-data)
+    # 3. Fall back to full pipeline (extract + label)
+    use_cached = False
     if args.labeled_data and os.path.exists(args.labeled_data):
         labeled_data_path = args.labeled_data
+        use_cached = True
         print(f"\n  Using pre-labeled data: {labeled_data_path}")
-    else:
+    elif not args.fresh_data and os.path.exists(args.save_labeled):
+        use_cached = True
+        print(f"\n  Found cached labeled data: {labeled_data_path}")
+        print(f"  (use --fresh-data to force re-extraction and re-labeling)")
+
+    if not use_cached:
+        if not args.fresh_data and not os.path.exists(args.save_labeled):
+            print(f"\n  No cached data found at {args.save_labeled}")
+            print(f"  Running full pipeline (extract + label)...")
+
         if not os.path.exists(args.pgn):
             print(f"ERROR: PGN file not found: {args.pgn}")
             print("Run first: python -m training.download_data")
