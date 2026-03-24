@@ -5,6 +5,9 @@ Provides REST API endpoints for AI chess engines.
 Start with: uvicorn main:app --reload --port 8000
 """
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -14,7 +17,7 @@ from engines.material_engine import MaterialEngine
 from engines.minimax_engine import MinimaxEngine
 from engines.mcts_engine import MCTSEngine
 from engines.nn_engine import discover_models
-from routers import moves, models, evaluate, tournament_games, puzzles, review
+from routers import moves, models, evaluate, tournament_games, puzzles, review, explorer
 
 # ─── Create the FastAPI app ───────────────────────────────────────────────────
 
@@ -73,6 +76,7 @@ app.include_router(evaluate.router, prefix="/api")
 app.include_router(tournament_games.router, prefix="/api")
 app.include_router(puzzles.router, prefix="/api")
 app.include_router(review.router, prefix="/api")
+app.include_router(explorer.router, prefix="/api")
 
 # Load puzzle database
 puzzles.load_puzzles()
