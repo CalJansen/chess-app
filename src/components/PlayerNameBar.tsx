@@ -8,6 +8,7 @@ interface PlayerNameBarProps {
   color: "white" | "black";
   isActive: boolean;
   capturedPieces: string[];
+  materialAdvantage?: number;
   position: "top" | "bottom";
   isEditable?: boolean;
   onNameChange?: (name: string) => void;
@@ -18,6 +19,7 @@ export default function PlayerNameBar({
   color,
   isActive,
   capturedPieces,
+  materialAdvantage,
   position,
   isEditable = false,
   onNameChange,
@@ -102,10 +104,15 @@ export default function PlayerNameBar({
         </span>
       )}
 
-      {/* Captured pieces */}
+      {/* Captured pieces + material advantage */}
       {capturedPieces.length > 0 && (
-        <span className="text-sm tracking-tight ml-auto">
-          {capturedPieces.join("")}
+        <span className="text-sm tracking-tight ml-auto flex items-center gap-1">
+          <span>{capturedPieces.join("")}</span>
+          {materialAdvantage != null && materialAdvantage > 0 && (
+            <span className={`text-xs font-semibold ${theme.textMuted}`}>
+              +{materialAdvantage}
+            </span>
+          )}
         </span>
       )}
     </div>

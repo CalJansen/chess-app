@@ -29,6 +29,9 @@ export default function PuzzlePanel({ puzzle }: PuzzlePanelProps) {
   const [ratingMin, setRatingMin] = useState(800);
   const [ratingMax, setRatingMax] = useState(2000);
   const [hasLoaded, setHasLoaded] = useState(false);
+  const [showTags, setShowTags] = useState(() =>
+    typeof window !== "undefined" ? localStorage.getItem("chess-puzzle-show-tags") !== "false" : true
+  );
 
   // Load themes on mount
   useEffect(() => {
@@ -112,19 +115,33 @@ export default function PuzzlePanel({ puzzle }: PuzzlePanelProps) {
       {/* Puzzle info */}
       {puzzle.puzzle && (
         <div className={`${theme.panel} rounded-lg p-3 border border-white/10`}>
-          <p className={`text-sm font-semibold ${theme.textPrimary}`}>
-            Rating: {puzzle.puzzle.rating}
-          </p>
-          <div className="flex flex-wrap gap-1 mt-2">
-            {puzzle.puzzle.themes.map((t) => (
-              <span
-                key={t}
-                className="text-xs px-2 py-0.5 rounded-full bg-blue-900/40 text-blue-300 border border-blue-800"
-              >
-                {formatTheme(t)}
-              </span>
-            ))}
+          <div className="flex items-center justify-between">
+            <p className={`text-sm font-semibold ${theme.textPrimary}`}>
+              Rating: {puzzle.puzzle.rating}
+            </p>
+            <button
+              onClick={() => setShowTags(prev => {
+                const next = !prev;
+                localStorage.setItem("chess-puzzle-show-tags", String(next));
+                return next;
+              })}
+              className={`text-xs ${theme.textMuted} hover:${theme.textPrimary} transition-colors`}
+            >
+              {showTags ? "Hide tags" : "Show tags"}
+            </button>
           </div>
+          {showTags && (
+            <div className="flex flex-wrap gap-1 mt-2">
+              {puzzle.puzzle.themes.map((t) => (
+                <span
+                  key={t}
+                  className="text-xs px-2 py-0.5 rounded-full bg-blue-900/40 text-blue-300 border border-blue-800"
+                >
+                  {formatTheme(t)}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
