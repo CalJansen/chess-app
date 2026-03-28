@@ -123,15 +123,17 @@ venv\Scripts\python.exe -u -m training.train_stockfish --max-games 5000 --depth 
 # More data + deeper analysis (slower, better labels)
 venv\Scripts\python.exe -u -m training.train_stockfish --max-games 10000 --depth 15
 
-# Reuse cached labeled data (skip Stockfish labeling phase)
-venv\Scripts\python.exe -u -m training.train_stockfish --labeled-data data/sf_training_data.pt
+# Retrain with different hyperparameters (auto-reuses cached labels at data/sf_training_data.pt)
+venv\Scripts\python.exe -u -m training.train_stockfish --lr 0.0003 --epochs 80
 
-# Retrain with different hyperparameters using cached labels
-venv\Scripts\python.exe -u -m training.train_stockfish \
-  --labeled-data data/sf_training_data.pt \
-  --output models/chess_value_sf_v2.pt \
-  --lr 0.0003 --epochs 80
+# Force re-extraction and re-labeling (ignores cached data)
+venv\Scripts\python.exe -u -m training.train_stockfish --fresh-data --max-games 10000 --depth 15
+
+# Use a specific labeled data file
+venv\Scripts\python.exe -u -m training.train_stockfish --labeled-data data/sf_training_data.pt
 ```
+
+> **Note:** Labeled data is automatically cached to `data/sf_training_data.pt`. On subsequent runs the script reuses this cache unless you pass `--fresh-data`. This avoids accidentally re-running hours of Stockfish labeling.
 
 #### V2 Architecture (SE-ResNet + Enhanced Encoding)
 
@@ -141,12 +143,20 @@ Train a larger model with Squeeze-and-Excitation attention blocks and 26-plane b
 # Full pipeline: extract, label, train V2
 venv\Scripts\python.exe -u -m training.train_v2 --max-games 5000 --depth 12
 
-# Reuse cached labels (separate cache from v1 due to different encoding)
+# Retrain with different hyperparameters (auto-reuses cached labels at data/sf_v2_training_data.pt)
+venv\Scripts\python.exe -u -m training.train_v2 --lr 0.0003 --epochs 80
+
+# Force re-extraction and re-labeling (ignores cached data)
+venv\Scripts\python.exe -u -m training.train_v2 --fresh-data --max-games 50000 --depth 15
+
+# Use a specific labeled data file
 venv\Scripts\python.exe -u -m training.train_v2 --labeled-data data/sf_v2_training_data.pt
 
 # Compare v1 vs v2 in a tournament
 venv\Scripts\python.exe -u -m training.tournament --engines nn-chess_value_v2 nn-chess_value_sf_v1 minimax-d3 --games 20
 ```
+
+> **Note:** V2 labeled data is cached separately from V1 (at `data/sf_v2_training_data.pt`) because V2 uses a different 26-plane encoding. The script auto-reuses cached data unless you pass `--fresh-data`.
 
 #### Training Options
 
@@ -213,32 +223,38 @@ Tournament sample games are saved to `backend/data/tournament_games/` and can be
 chess-app/
 ├── src/                    # Next.js frontend
 │   ├── components/         # React components (Board, ChessGame, etc.)
-│   ├── hooks/              # Custom hooks (useChessGame, useAIGame, etc.)
-│   ├── contexts/           # Theme context
-│   ├── data/               # Opening database (openings.json)
-│   ├── services/           # API client
+│   │   ├── panels/         # Tab panels (PlayPanel, ExplorerPanel, PuzzlePanel, HistoryPanel)
+│   │   └── ...
+│   ├── hooks/              # Custom hooks (useChessGame, useAIGame, useOpeningExplorer, etc.)
+│   ├── contexts/           # Theme + AppMode contexts
+│   ├── data/               # Opening databases (openings.json, openings-tree.json)
+│   ├── services/           # API client, Lichess explorer client
 │   └── utils/              # PGN, game history, openings utilities
 ├── backend/
 │   ├── main.py             # FastAPI app entry point
 │   ├── config.py           # CORS and app configuration
+│   ├── .env                # API tokens (gitignored)
 │   ├── engines/            # AI engine implementations
 │   │   ├── base.py         # Abstract engine base class
 │   │   ├── random_engine.py
 │   │   ├── material_engine.py
 │   │   ├── minimax_engine.py
 │   │   ├── mcts_engine.py
-│   │   ├── nn_model.py     # ResNet value network (PyTorch)
+│   │   ├── nn_model.py     # ResNet value networks (v1 + v2 SE-ResNet)
 │   │   └── nn_engine.py    # NN-based engine + model auto-discovery
 │   ├── training/           # ML training pipeline
 │   │   ├── download_data.py
 │   │   ├── prepare_dataset.py
-│   │   ├── board_encoding.py
-│   │   ├── train.py
-│   │   ├── train_stockfish.py  # Stockfish-supervised training
+│   │   ├── board_encoding.py      # V1: 18-plane encoding
+│   │   ├── board_encoding_v2.py   # V2: 26-plane encoding (attacks, pawn structure, etc.)
+│   │   ├── train.py               # Game-outcome training
+│   │   ├── train_stockfish.py     # Stockfish-supervised training (v1)
+│   │   ├── train_v2.py            # Stockfish-supervised training (v2 SE-ResNet)
 │   │   ├── evaluate_model.py
 │   │   └── tournament.py
 │   ├── routers/            # API route handlers
+│   │   └── explorer.py     # Lichess Explorer API proxy
 │   ├── models/             # Trained .pt model files (gitignored)
-│   └── data/               # Training data (gitignored)
+│   └── data/               # Training data + cached labels (gitignored)
 └── scripts/                # Build utilities (openings DB generator)
 ```

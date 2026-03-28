@@ -1,6 +1,6 @@
 import openingsData from "@/data/openings.json";
 
-interface Opening {
+export interface Opening {
   eco: string;
   name: string;
 }

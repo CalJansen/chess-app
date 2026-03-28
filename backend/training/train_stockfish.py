@@ -268,6 +268,8 @@ Examples:
     # Cache
     parser.add_argument("--save-labeled", default=os.path.join(DATA_DIR, "sf_training_data.pt"),
                         help="Save labeled data here for reuse (default: data/sf_training_data.pt)")
+    parser.add_argument("--fresh-data", action="store_true",
+                        help="Force re-extraction and re-labeling even if cached data exists")
 
     args = parser.parse_args()
 
@@ -276,11 +278,25 @@ Examples:
 
     labeled_data_path = args.save_labeled
 
+    # Determine whether to use cached labeled data:
+    # 1. Explicit --labeled-data path always wins
+    # 2. Auto-detect cached data at --save-labeled path (unless --fresh-data)
+    # 3. Fall back to full pipeline (extract + label)
+    use_cached = False
     if args.labeled_data and os.path.exists(args.labeled_data):
-        # Skip phases 1 & 2 — use cached labeled data
         labeled_data_path = args.labeled_data
+        use_cached = True
         print(f"Using pre-labeled data: {labeled_data_path}")
-    else:
+    elif not args.fresh_data and os.path.exists(args.save_labeled):
+        use_cached = True
+        print(f"Found cached labeled data: {labeled_data_path}")
+        print(f"(use --fresh-data to force re-extraction and re-labeling)")
+
+    if not use_cached:
+        if not args.fresh_data and not os.path.exists(args.save_labeled):
+            print(f"No cached data found at {args.save_labeled}")
+            print(f"Running full pipeline (extract + label)...")
+
         # Phase 1: Extract positions
         if not os.path.exists(args.pgn):
             print(f"ERROR: PGN file not found: {args.pgn}")

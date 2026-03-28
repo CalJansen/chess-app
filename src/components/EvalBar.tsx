@@ -85,8 +85,9 @@ export default function EvalBar({
       className="relative flex flex-col rounded-l-lg overflow-hidden"
       style={{
         width: "28px",
-        border: `1px solid ${theme.panelBorder}`,
-        borderRight: "none",
+        borderTop: `1px solid ${theme.panelBorder}`,
+        borderBottom: `1px solid ${theme.panelBorder}`,
+        borderLeft: `1px solid ${theme.panelBorder}`,
       }}
     >
       {/* Top section (white when board=white, black when board=black) */}
