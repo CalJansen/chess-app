@@ -1,10 +1,16 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import { Chess } from "chess.js";
+import { Chess, Move } from "chess.js";
 import { getTreeRoot, getNodeForMoves, getChildrenForMoves, searchOpenings } from "@/utils/openingsTree";
 import { fetchExplorerStats, ExplorerData, ExplorerMove } from "@/services/lichessExplorer";
 import type { OpeningTreeNode, SearchResult } from "@/utils/openingsTree";
+import type { CapturedPieces } from "@/hooks/useChessGame";
+
+const PIECE_UNICODE: Record<string, string> = {
+  bp: "\u265F", bn: "\u265E", bb: "\u265D", br: "\u265C", bq: "\u265B", bk: "\u265A",
+};
+const PIECE_VALUES: Record<string, number> = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
 
 export interface ExplorerState {
   // Current position
@@ -30,6 +36,9 @@ export interface ExplorerState {
   navigateToOpening: (moves: string[]) => void;
   setSearchQuery: (query: string) => void;
   getStartingMoves: () => string[];
+
+  // Captured pieces
+  getCapturedPieces: () => CapturedPieces;
 
   // Board interaction
   onSquareClick: (square: string) => void;
@@ -70,7 +79,10 @@ export function useOpeningExplorer(): ExplorerState {
 
     // Get tree node info
     const node = getNodeForMoves(moves);
-    setCurrentOpening(node?.eco && node?.name ? { eco: node.eco, name: node.name } : null);
+    // Only update opening when a match is found — preserve last known opening
+    if (node?.eco && node?.name) {
+      setCurrentOpening({ eco: node.eco, name: node.name });
+    }
     setTreeChildren(getChildrenForMoves(moves));
     setSelectedSquare(null);
     setLegalMoves([]);
@@ -113,6 +125,7 @@ export function useOpeningExplorer(): ExplorerState {
 
   const goToStart = useCallback(() => {
     setCurrentMoves([]);
+    setCurrentOpening(null);
     updatePosition([]);
   }, [updatePosition]);
 
@@ -215,6 +228,30 @@ export function useOpeningExplorer(): ExplorerState {
     }
   }
 
+  const getCapturedPieces = useCallback((): CapturedPieces => {
+    const captured: CapturedPieces = { white: [], black: [], materialAdvantage: { white: 0, black: 0 } };
+    const history = gameRef.current.history({ verbose: true }) as Move[];
+    let whiteValue = 0;
+    let blackValue = 0;
+    for (const move of history) {
+      if (move.captured) {
+        const key = `b${move.captured}`;
+        const symbol = PIECE_UNICODE[key] || move.captured;
+        const value = PIECE_VALUES[move.captured] || 0;
+        if (move.color === "w") {
+          captured.white.push(symbol);
+          whiteValue += value;
+        } else {
+          captured.black.push(symbol);
+          blackValue += value;
+        }
+      }
+    }
+    const diff = whiteValue - blackValue;
+    captured.materialAdvantage = { white: diff > 0 ? diff : 0, black: diff < 0 ? -diff : 0 };
+    return captured;
+  }, [currentFen]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return {
     currentMoves,
     currentFen,
@@ -230,6 +267,7 @@ export function useOpeningExplorer(): ExplorerState {
     navigateToOpening,
     setSearchQuery,
     getStartingMoves,
+    getCapturedPieces,
     onSquareClick,
     onPieceDrop,
     onPieceDragBegin,

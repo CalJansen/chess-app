@@ -238,14 +238,14 @@ export default function ChessGame() {
   const confirmRewind = useCallback(() => {
     if (rewindTarget !== null) {
       if (rewindTarget === -1) {
-        // Rewind to start: undo all moves
         gameGoToMove(-1);
       } else {
         gameGoToMove(rewindTarget);
       }
+      clock.clearTimeouts();
       setRewindTarget(null);
     }
-  }, [rewindTarget, gameGoToMove]);
+  }, [rewindTarget, gameGoToMove, clock]);
 
   const cancelRewind = useCallback(() => {
     setRewindTarget(null);
@@ -399,8 +399,8 @@ export default function ChessGame() {
     : (isPlayMode && !playBoardDisabled) ? onPieceDragBegin
     : () => {};
 
-  // Eval bar — show during analysis or game review
-  const evalEnabled = (isPlayMode || isHistoryMode) && (analysisEnabled || (replay.isActive && review.status !== "idle"));
+  // Eval bar — show during analysis, game review, or explorer mode (always on)
+  const evalEnabled = isExplorerMode || ((isPlayMode || isHistoryMode) && (analysisEnabled || (replay.isActive && review.status !== "idle")));
   const evaluation = useStockfishEval({ fen: displayFen, enabled: evalEnabled });
 
   // Hint arrow
@@ -408,12 +408,18 @@ export default function ChessGame() {
     ? [{ startSquare: hintArrow.from, endSquare: hintArrow.to, color: "rgba(0, 180, 80, 0.7)" }]
     : [];
 
-  // Player names
-  const captured = getCapturedPieces();
+  // Player names & captured pieces
+  const explorerCaptured = explorer.getCapturedPieces();
+  const captured = isExplorerMode ? explorerCaptured : getCapturedPieces();
   const bottomColor = displayOrientation;
   const topColor = displayOrientation === "white" ? "black" : "white";
+  // Determine active turn for player bar highlight
+  const activeTurn = isExplorerMode
+    ? (explorer.currentFen.includes(" w ") ? "white" : "black")
+    : turn as "white" | "black";
 
   const getNameForColor = (color: "white" | "black"): string => {
+    if (isExplorerMode) return color === "white" ? "White" : "Black";
     if (replay.isActive) {
       return color === "white" ? (replay.whitePlayer || "White") : (replay.blackPlayer || "Black");
     }
@@ -424,6 +430,7 @@ export default function ChessGame() {
   };
 
   const isEditable = (color: "white" | "black"): boolean => {
+    if (isExplorerMode) return false;
     if (replay.isActive) return false;
     if (ai.aiEnabled) return color === ai.playerColor;
     return color === "white";
@@ -441,8 +448,8 @@ export default function ChessGame() {
     );
   }
 
-  // Show player name bars only in play mode (or during replay in play/history)
-  const showPlayerNames = isPlayMode || (isHistoryMode && replay.isActive);
+  // Show player name bars in play mode, explorer mode, or during replay
+  const showPlayerNames = isPlayMode || isExplorerMode || (isHistoryMode && replay.isActive);
   // Show controls below the board
   const showPlayControls = isPlayMode && !replay.isActive;
   const showReplayControls = (isPlayMode || isHistoryMode) && replay.isActive;
@@ -506,82 +513,87 @@ export default function ChessGame() {
         </div>
 
         {/* Center: Board area */}
-        <div className="flex-shrink-0 flex flex-row items-stretch order-1 lg:order-2">
-          {evalEnabled && (
-            <EvalBar
-              scoreCp={evaluation.score}
-              mateIn={evaluation.mateIn}
-              isLoading={evaluation.isLoading}
-              boardOrientation={displayOrientation}
+        <div className="flex-shrink-0 flex flex-col order-1 lg:order-2">
+          {/* Eval bar + board stretch together */}
+          <div className="flex flex-row items-stretch">
+            {evalEnabled && (
+              <EvalBar
+                scoreCp={evaluation.score}
+                mateIn={evaluation.mateIn}
+                isLoading={evaluation.isLoading}
+                boardOrientation={displayOrientation}
+              />
+            )}
+            <div className="relative">
+              {showPlayerNames && (
+                <PlayerNameBar
+                  name={getNameForColor(topColor)}
+                  color={topColor}
+                  isActive={activeTurn === topColor}
+                  capturedPieces={topColor === "white" ? captured.white : captured.black}
+                  materialAdvantage={topColor === "white" ? captured.materialAdvantage.white : captured.materialAdvantage.black}
+                  position="top"
+                  isEditable={isEditable(topColor)}
+                  onNameChange={handlePlayerNameChange}
+                />
+              )}
+              <Board
+                fen={displayFen}
+                boardOrientation={displayOrientation}
+                squareStyles={boardSquareStyles}
+                arrows={bestMoveArrows}
+                onSquareClick={boardOnSquareClick}
+                onPieceDrop={boardOnPieceDrop}
+                onPieceDragBegin={boardOnPieceDragBegin}
+              />
+              {showPlayerNames && (
+                <PlayerNameBar
+                  name={getNameForColor(bottomColor)}
+                  color={bottomColor}
+                  isActive={activeTurn === bottomColor}
+                  capturedPieces={bottomColor === "white" ? captured.white : captured.black}
+                  materialAdvantage={bottomColor === "white" ? captured.materialAdvantage.white : captured.materialAdvantage.black}
+                  position="bottom"
+                  isEditable={isEditable(bottomColor)}
+                  onNameChange={handlePlayerNameChange}
+                />
+              )}
+
+              {/* Game over overlay */}
+              {isPlayMode && (isGameOver || !!timeoutMessage) && !replay.isActive && (
+                <GameOverOverlay
+                  status={timeoutMessage || getStatus()}
+                  onNewGame={handleNewGame}
+                  onReview={moveHistory.length > 0 ? handleReview : undefined}
+                />
+              )}
+            </div>
+          </div>
+
+          {/* Controls below board — outside the eval bar stretch context */}
+          {showReplayControls && (
+            <ReplayControls
+              currentIndex={replay.currentIndex}
+              totalMoves={replay.totalMoves}
+              onStepBack={replay.stepBack}
+              onStepForward={replay.stepForward}
+              onGoToStart={replay.goToStart}
+              onGoToEnd={replay.goToEnd}
+              onGoToMove={replay.goToMove}
+              onExit={() => { replay.stopReplay(); review.clearReview(); }}
             />
           )}
-          <div className="relative">
-            {showPlayerNames && (
-              <PlayerNameBar
-                name={getNameForColor(topColor)}
-                color={topColor}
-                isActive={turn === topColor}
-                capturedPieces={topColor === "white" ? captured.white : captured.black}
-                position="top"
-                isEditable={isEditable(topColor)}
-                onNameChange={handlePlayerNameChange}
-              />
-            )}
-            <Board
-              fen={displayFen}
-              boardOrientation={displayOrientation}
-              squareStyles={boardSquareStyles}
-              arrows={bestMoveArrows}
-              onSquareClick={boardOnSquareClick}
-              onPieceDrop={boardOnPieceDrop}
-              onPieceDragBegin={boardOnPieceDragBegin}
+
+          {showPlayControls && (
+            <GameControls
+              onUndo={handleUndo}
+              onRedo={handleRedo}
+              onFlip={flipBoard}
+              onNewGame={handleNewGame}
+              canUndo={moveHistory.length >= (ai.aiEnabled ? 2 : 1) && !ai.aiThinking}
+              canRedo={canRedo && !ai.aiThinking}
             />
-            {showPlayerNames && (
-              <PlayerNameBar
-                name={getNameForColor(bottomColor)}
-                color={bottomColor}
-                isActive={turn === bottomColor}
-                capturedPieces={bottomColor === "white" ? captured.white : captured.black}
-                position="bottom"
-                isEditable={isEditable(bottomColor)}
-                onNameChange={handlePlayerNameChange}
-              />
-            )}
-
-            {/* Controls below the board */}
-            {showReplayControls && (
-              <ReplayControls
-                currentIndex={replay.currentIndex}
-                totalMoves={replay.totalMoves}
-                onStepBack={replay.stepBack}
-                onStepForward={replay.stepForward}
-                onGoToStart={replay.goToStart}
-                onGoToEnd={replay.goToEnd}
-                onGoToMove={replay.goToMove}
-                onExit={() => { replay.stopReplay(); review.clearReview(); }}
-              />
-            )}
-
-            {showPlayControls && (
-              <GameControls
-                onUndo={handleUndo}
-                onRedo={handleRedo}
-                onFlip={flipBoard}
-                onNewGame={handleNewGame}
-                canUndo={moveHistory.length >= (ai.aiEnabled ? 2 : 1) && !ai.aiThinking}
-                canRedo={canRedo && !ai.aiThinking}
-              />
-            )}
-
-            {/* Game over overlay */}
-            {isPlayMode && (isGameOver || !!timeoutMessage) && !replay.isActive && (
-              <GameOverOverlay
-                status={timeoutMessage || getStatus()}
-                onNewGame={handleNewGame}
-                onReview={moveHistory.length > 0 ? handleReview : undefined}
-              />
-            )}
-          </div>
+          )}
         </div>
 
         {/* Right Sidebar */}

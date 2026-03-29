@@ -23,7 +23,7 @@ export default function GameControls({
   const [confirmingNewGame, setConfirmingNewGame] = useState(false);
   const { theme } = useTheme();
 
-  const btnClass = `flex-1 py-1.5 ${theme.buttonBg} ${theme.buttonHover} ${theme.buttonText} rounded text-xs font-medium transition-colors`;
+  const btnClass = `flex-1 py-2 ${theme.buttonBg} ${theme.buttonHover} ${theme.buttonText} rounded-lg text-sm font-medium transition-colors`;
   const disabledClass = "disabled:opacity-40 disabled:cursor-not-allowed";
 
   const handleNewGame = () => {
@@ -62,7 +62,7 @@ export default function GameControls({
         <>
           <button
             onClick={handleNewGame}
-            className="flex-1 py-1.5 bg-red-700 hover:bg-red-600 rounded text-xs font-medium transition-colors text-white"
+            className="flex-1 py-2 bg-red-700 hover:bg-red-600 rounded-lg text-sm font-medium transition-colors text-white"
           >
             Confirm
           </button>

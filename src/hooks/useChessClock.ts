@@ -126,6 +126,11 @@ export function useChessClock() {
     setBlackTimedOut(false);
   }, [timeControl.minutes]);
 
+  const clearTimeouts = useCallback(() => {
+    setWhiteTimedOut(false);
+    setBlackTimedOut(false);
+  }, []);
+
   return {
     whiteTime,
     blackTime,
@@ -140,6 +145,7 @@ export function useChessClock() {
     startClock,
     pauseClock,
     resetClock,
+    clearTimeouts,
   };
 }
 

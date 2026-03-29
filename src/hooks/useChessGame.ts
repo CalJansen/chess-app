@@ -9,7 +9,12 @@ import type { MoveType } from "@/hooks/useSoundEffects";
 export interface CapturedPieces {
   white: string[];
   black: string[];
+  materialAdvantage: { white: number; black: number };
 }
+
+const PIECE_VALUES: Record<string, number> = {
+  p: 1, n: 3, b: 3, r: 5, q: 9, k: 0,
+};
 
 const PIECE_UNICODE: Record<string, string> = {
   wp: "\u2659",
@@ -104,20 +109,30 @@ export function useChessGame(options?: { autoFlip?: boolean }) {
   }, [game]);
 
   const getCapturedPieces = useCallback((): CapturedPieces => {
-    const captured: CapturedPieces = { white: [], black: [] };
+    const captured: CapturedPieces = { white: [], black: [], materialAdvantage: { white: 0, black: 0 } };
     const history = game.history({ verbose: true }) as Move[];
+    let whiteValue = 0;
+    let blackValue = 0;
     for (const move of history) {
       if (move.captured) {
-        const capturedColor = move.color === "w" ? "b" : "w";
-        const key = `${capturedColor}${move.captured}`;
+        // Always use filled (black) glyphs for visual consistency
+        const key = `b${move.captured}`;
         const symbol = PIECE_UNICODE[key] || move.captured;
+        const value = PIECE_VALUES[move.captured] || 0;
         if (move.color === "w") {
           captured.white.push(symbol);
+          whiteValue += value;
         } else {
           captured.black.push(symbol);
+          blackValue += value;
         }
       }
     }
+    const diff = whiteValue - blackValue;
+    captured.materialAdvantage = {
+      white: diff > 0 ? diff : 0,
+      black: diff < 0 ? -diff : 0,
+    };
     return captured;
   }, [game]);
 
