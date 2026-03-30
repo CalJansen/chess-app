@@ -63,12 +63,13 @@ class StockfishEngine(ChessEngine):
             "UCI_Elo": str(self._elo),
         }
 
-        result = _engine.evaluate_with_options(
-            board.fen(), depth=self._depth, options=options
-        )
-
-        # Reset to full strength so the eval bar isn't affected
-        _engine.set_options({"UCI_LimitStrength": "false"})
+        try:
+            result = _engine.evaluate_with_options(
+                board.fen(), depth=self._depth, options=options
+            )
+        finally:
+            # Always reset to full strength so the eval bar isn't affected
+            _engine.set_options({"UCI_LimitStrength": "false"})
 
         if result and result["best_move"]:
             try:
