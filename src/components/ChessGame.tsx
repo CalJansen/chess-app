@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { Chess, type Square } from "chess.js";
 import { useChessGame } from "@/hooks/useChessGame";
 import { useAIGame } from "@/hooks/useAIGame";
 import { useReplayMode } from "@/hooks/useReplayMode";
@@ -148,13 +149,15 @@ export default function ChessGame() {
     ? "Black ran out of time! White wins!"
     : null;
 
-  // AI-mode double undo/redo
+  // AI-mode double undo/redo (auto-exits preview)
   const handleUndo = useCallback(() => {
+    setPreviewIndex(null); setPendingMove(null);
     undoMove();
     if (ai.aiEnabled) undoMove();
   }, [undoMove, ai.aiEnabled]);
 
   const handleRedo = useCallback(() => {
+    setPreviewIndex(null); setPendingMove(null);
     redoMove();
     if (ai.aiEnabled) redoMove();
   }, [redoMove, ai.aiEnabled]);
@@ -165,6 +168,8 @@ export default function ChessGame() {
     setGameEndSaved(false);
     setHintArrow(null);
     review.clearReview();
+    setPreviewIndex(null);
+    setPendingMove(null);
   }, [newGame, clock, review]);
 
   const handleHint = useCallback(async () => {
@@ -219,37 +224,149 @@ export default function ChessGame() {
     }
   }, [moveHistory, replay, review, ai.aiEnabled, ai.playerColor, ai.selectedEngine, playerName]);
 
-  // Click a move in the play tab's move history — show confirmation to rewind
-  const [rewindTarget, setRewindTarget] = useState<number | null>(null);
+  // ── Preview mode: view previous positions without modifying game state ──
+  const [previewIndex, setPreviewIndex] = useState<number | null>(null);
+  const [pendingMove, setPendingMove] = useState<{ from: string; to: string } | null>(null);
+  const [previewSelectedSquare, setPreviewSelectedSquare] = useState<string | null>(null);
+  const [previewLegalMoves, setPreviewLegalMoves] = useState<string[]>([]);
+  const inPreview = previewIndex !== null;
 
   const handlePlayMoveClick = useCallback((index: number) => {
-    // Only offer rewind if clicking a move before the last one
-    if (index < moveHistory.length - 1) {
-      setRewindTarget(index);
+    if (index === moveHistory.length - 1) {
+      setPreviewIndex(null);
+    } else {
+      setPreviewIndex(index);
     }
+    setPendingMove(null);
+    setPreviewSelectedSquare(null);
+    setPreviewLegalMoves([]);
   }, [moveHistory.length]);
 
   const handlePlayStartClick = useCallback(() => {
     if (moveHistory.length > 0) {
-      setRewindTarget(-1); // -1 means rewind to start (undo all)
+      setPreviewIndex(-1);
     }
+    setPendingMove(null);
+    setPreviewSelectedSquare(null);
+    setPreviewLegalMoves([]);
   }, [moveHistory.length]);
 
-  const confirmRewind = useCallback(() => {
-    if (rewindTarget !== null) {
-      if (rewindTarget === -1) {
-        gameGoToMove(-1);
-      } else {
-        gameGoToMove(rewindTarget);
-      }
-      clock.clearTimeouts();
-      setRewindTarget(null);
-    }
-  }, [rewindTarget, gameGoToMove, clock]);
-
-  const cancelRewind = useCallback(() => {
-    setRewindTarget(null);
+  const exitPreview = useCallback(() => {
+    setPreviewIndex(null);
+    setPendingMove(null);
+    setPreviewSelectedSquare(null);
+    setPreviewLegalMoves([]);
   }, []);
+
+  // Compute FEN at the preview index
+  const previewFen = useMemo(() => {
+    if (previewIndex === null) return null;
+    const g = new Chess();
+    for (let i = 0; i <= previewIndex && i < moveHistory.length; i++) {
+      try { g.move(moveHistory[i]); } catch { break; }
+    }
+    return g.fen();
+  }, [previewIndex, moveHistory]);
+
+  // Build a Chess instance at the preview position
+  const getPreviewGame = useCallback(() => {
+    const g = new Chess();
+    if (previewIndex === null) return g;
+    for (let i = 0; i <= previewIndex && i < moveHistory.length; i++) {
+      try { g.move(moveHistory[i]); } catch { break; }
+    }
+    return g;
+  }, [previewIndex, moveHistory]);
+
+  const handlePreviewSquareClick = useCallback((square: string) => {
+    const g = getPreviewGame();
+    if (previewSelectedSquare && previewSelectedSquare !== square && previewLegalMoves.includes(square)) {
+      setPendingMove({ from: previewSelectedSquare, to: square });
+      setPreviewSelectedSquare(null);
+      setPreviewLegalMoves([]);
+      return;
+    }
+    const piece = g.get(square as Square);
+    if (piece && piece.color === g.turn()) {
+      setPreviewSelectedSquare(square);
+      const moves = g.moves({ square: square as Square, verbose: true });
+      setPreviewLegalMoves(moves.map(m => m.to));
+    } else {
+      setPreviewSelectedSquare(null);
+      setPreviewLegalMoves([]);
+    }
+  }, [getPreviewGame, previewSelectedSquare, previewLegalMoves]);
+
+  const handlePreviewPieceDrop = useCallback((sourceSquare: string, targetSquare: string): boolean => {
+    const g = getPreviewGame();
+    try {
+      g.move({ from: sourceSquare as Square, to: targetSquare as Square, promotion: "q" });
+    } catch {
+      return false;
+    }
+    setPendingMove({ from: sourceSquare, to: targetSquare });
+    setPreviewSelectedSquare(null);
+    setPreviewLegalMoves([]);
+    return false;
+  }, [getPreviewGame]);
+
+  const handlePreviewPieceDragBegin = useCallback((square: string) => {
+    const g = getPreviewGame();
+    const piece = g.get(square as Square);
+    if (piece && piece.color === g.turn()) {
+      setPreviewSelectedSquare(square);
+      const moves = g.moves({ square: square as Square, verbose: true });
+      setPreviewLegalMoves(moves.map(m => m.to));
+    }
+  }, [getPreviewGame]);
+
+  const previewSquareStyles = useMemo(() => {
+    const styles: Record<string, React.CSSProperties> = {};
+    if (!inPreview || !previewFen) return styles;
+    if (previewSelectedSquare) {
+      styles[previewSelectedSquare] = { backgroundColor: "rgba(255, 255, 0, 0.4)" };
+    }
+    for (const sq of previewLegalMoves) {
+      const g = new Chess(previewFen);
+      const piece = g.get(sq as Square);
+      if (piece) {
+        styles[sq] = { background: "radial-gradient(circle, transparent 55%, rgba(0, 0, 0, 0.3) 55%)" };
+      } else {
+        styles[sq] = { background: "radial-gradient(circle, rgba(0, 0, 0, 0.25) 25%, transparent 25%)" };
+      }
+    }
+    return styles;
+  }, [inPreview, previewFen, previewSelectedSquare, previewLegalMoves]);
+
+  const confirmOverride = useCallback(() => {
+    if (pendingMove && previewIndex !== null) {
+      gameGoToMove(previewIndex);
+      clock.clearTimeouts();
+      onPieceDrop(pendingMove.from, pendingMove.to);
+      exitPreview();
+    }
+  }, [pendingMove, previewIndex, gameGoToMove, clock, onPieceDrop, exitPreview]);
+
+  const cancelOverride = useCallback(() => {
+    setPendingMove(null);
+  }, []);
+
+  const previewStepBack = useCallback(() => {
+    setPreviewIndex(prev => prev === null ? null : Math.max(-1, prev - 1));
+    setPreviewSelectedSquare(null);
+    setPreviewLegalMoves([]);
+  }, []);
+
+  const previewStepForward = useCallback(() => {
+    setPreviewIndex(prev => {
+      if (prev === null) return null;
+      const next = prev + 1;
+      if (next >= moveHistory.length - 1) return null;
+      return next;
+    });
+    setPreviewSelectedSquare(null);
+    setPreviewLegalMoves([]);
+  }, [moveHistory.length]);
 
   // ── Puzzle board config ──
   const [puzzleBoardSide, setPuzzleBoardSide] = useState<"white" | "black">("white");
@@ -357,7 +474,9 @@ export default function ChessGame() {
   const isHistoryMode = mode === "history";
 
   // Play mode display
-  const playDisplayFen = replay.isActive ? replay.displayFen : fen;
+  const playDisplayFen = replay.isActive ? replay.displayFen
+    : previewFen !== null ? previewFen
+    : fen;
   const playDisplayOrientation = replay.isActive
     ? "white"
     : ai.aiEnabled
@@ -380,22 +499,26 @@ export default function ChessGame() {
 
   const boardSquareStyles = isPuzzleMode ? puzzleSquareStyles
     : isExplorerMode ? explorer.squareStyles
+    : (isPlayMode && inPreview) ? previewSquareStyles
     : (isPlayMode && !playBoardDisabled) ? squareStyles
     : {};
 
   const boardOnSquareClick = isPuzzleMode ? handlePuzzleSquareClick
     : isExplorerMode ? explorer.onSquareClick
+    : (isPlayMode && inPreview) ? handlePreviewSquareClick
     : (isPlayMode && !playBoardDisabled) ? onSquareClick
     : () => {};
 
   const boardOnPieceDrop = isPuzzleMode ? handlePuzzlePieceDrop
     : isExplorerMode ? explorer.onPieceDrop
+    : (isPlayMode && inPreview) ? handlePreviewPieceDrop
     : (isPlayMode && !playBoardDisabled) ? onPieceDrop
     : () => false;
 
   const boardOnPieceDragBegin = isPuzzleMode
     ? ((square: string) => { puzzle.selectSquare(square); })
     : isExplorerMode ? explorer.onPieceDragBegin
+    : (isPlayMode && inPreview) ? handlePreviewPieceDragBegin
     : (isPlayMode && !playBoardDisabled) ? onPieceDragBegin
     : () => {};
 
@@ -451,7 +574,8 @@ export default function ChessGame() {
   // Show player name bars in play mode, explorer mode, or during replay
   const showPlayerNames = isPlayMode || isExplorerMode || (isHistoryMode && replay.isActive);
   // Show controls below the board
-  const showPlayControls = isPlayMode && !replay.isActive;
+  const showPlayControls = isPlayMode && !replay.isActive && !inPreview;
+  const showPreviewControls = isPlayMode && !replay.isActive && inPreview;
   const showReplayControls = (isPlayMode || isHistoryMode) && replay.isActive;
 
   return (
@@ -470,6 +594,7 @@ export default function ChessGame() {
               isReplaying={replay.isActive}
               replayMoves={replay.moves}
               replayCurrentIndex={replay.currentIndex}
+              previewIndex={previewIndex}
               onMoveClick={replay.isActive ? replay.goToMove : handlePlayMoveClick}
               onStartClick={replay.isActive ? replay.goToStart : handlePlayStartClick}
               status={timeoutMessage || getStatus()}
@@ -559,8 +684,8 @@ export default function ChessGame() {
                 />
               )}
 
-              {/* Game over overlay */}
-              {isPlayMode && (isGameOver || !!timeoutMessage) && !replay.isActive && (
+              {/* Game over overlay — hidden during preview */}
+              {isPlayMode && (isGameOver || !!timeoutMessage) && !replay.isActive && !inPreview && (
                 <GameOverOverlay
                   status={timeoutMessage || getStatus()}
                   onNewGame={handleNewGame}
@@ -581,6 +706,19 @@ export default function ChessGame() {
               onGoToEnd={replay.goToEnd}
               onGoToMove={replay.goToMove}
               onExit={() => { replay.stopReplay(); review.clearReview(); }}
+            />
+          )}
+
+          {showPreviewControls && (
+            <ReplayControls
+              currentIndex={previewIndex!}
+              totalMoves={moveHistory.length}
+              onStepBack={previewStepBack}
+              onStepForward={previewStepForward}
+              onGoToStart={() => { setPreviewIndex(-1); setPreviewSelectedSquare(null); setPreviewLegalMoves([]); }}
+              onGoToEnd={exitPreview}
+              onGoToMove={(i) => { setPreviewIndex(i >= moveHistory.length - 1 ? null : i); setPreviewSelectedSquare(null); setPreviewLegalMoves([]); }}
+              onExit={exitPreview}
             />
           )}
 
@@ -632,43 +770,36 @@ export default function ChessGame() {
         </div>
       </div>
 
-      {/* Rewind confirmation modal */}
-      {rewindTarget !== null && (
+      {/* Override confirmation modal — shown when user tries to move a piece during preview */}
+      {pendingMove !== null && previewIndex !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="bg-gray-800 border border-gray-600 rounded-xl p-6 shadow-2xl max-w-sm mx-4 text-center">
-            <h3 className="text-white text-lg font-semibold mb-2">Rewind Game?</h3>
-            {rewindTarget === -1 ? (
-              <>
-                <p className="text-gray-300 text-sm mb-1">
-                  Go back to the <span className="font-bold">starting position</span>
-                </p>
-                <p className="text-gray-400 text-xs mb-5">
-                  All {moveHistory.length} move{moveHistory.length !== 1 ? "s" : ""} will
-                  be undone (available in redo).
-                </p>
-              </>
-            ) : (
-              <>
-                <p className="text-gray-300 text-sm mb-1">
-                  Go back to move {Math.floor(rewindTarget / 2) + 1}
-                  {rewindTarget % 2 === 0 ? "." : "..."}{" "}
-                  <span className="font-mono font-bold">{moveHistory[rewindTarget]}</span>
-                </p>
-                <p className="text-gray-400 text-xs mb-5">
-                  {moveHistory.length - rewindTarget - 1} move{moveHistory.length - rewindTarget - 1 !== 1 ? "s" : ""} will
-                  be undone (available in redo).
-                </p>
-              </>
-            )}
+            <h3 className="text-white text-lg font-semibold mb-2">Override Game?</h3>
+            <p className="text-gray-300 text-sm mb-1">
+              {previewIndex === -1 ? (
+                <>Play from the <span className="font-bold">starting position</span></>
+              ) : (
+                <>Play from move {Math.floor(previewIndex / 2) + 1}
+                {previewIndex % 2 === 0 ? "." : "..."}{" "}
+                <span className="font-mono font-bold">{moveHistory[previewIndex]}</span></>
+              )}
+            </p>
+            <p className="text-gray-400 text-xs mb-1">
+              Move: <span className="font-mono font-bold">{pendingMove.from} → {pendingMove.to}</span>
+            </p>
+            <p className="text-gray-400 text-xs mb-5">
+              {previewIndex === -1 ? moveHistory.length : moveHistory.length - previewIndex - 1} move{(previewIndex === -1 ? moveHistory.length : moveHistory.length - previewIndex - 1) !== 1 ? "s" : ""} will
+              be undone.
+            </p>
             <div className="flex gap-3 justify-center">
               <button
-                onClick={cancelRewind}
+                onClick={cancelOverride}
                 className="px-5 py-2 rounded-lg bg-gray-600 hover:bg-gray-500 text-white text-sm font-medium transition-colors"
               >
                 Cancel
               </button>
               <button
-                onClick={confirmRewind}
+                onClick={confirmOverride}
                 className="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors"
               >
                 Confirm

@@ -16,6 +16,7 @@ interface PlayPanelProps {
   isReplaying: boolean;
   replayMoves: string[];
   replayCurrentIndex: number;
+  previewIndex?: number | null;
   onMoveClick?: (index: number) => void;
   onStartClick?: () => void;
   // Game status
@@ -39,6 +40,7 @@ export default function PlayPanel({
   replayCurrentIndex,
   onMoveClick,
   onStartClick,
+  previewIndex,
   status,
   isGameOver,
   inCheck,
@@ -55,7 +57,7 @@ export default function PlayPanel({
 
       <MoveHistory
         history={isReplaying ? replayMoves : moveHistory}
-        currentMoveIndex={isReplaying ? replayCurrentIndex : undefined}
+        currentMoveIndex={isReplaying ? replayCurrentIndex : previewIndex !== null && previewIndex !== undefined ? previewIndex : undefined}
         onMoveClick={onMoveClick}
         showStart
         onStartClick={onStartClick}
