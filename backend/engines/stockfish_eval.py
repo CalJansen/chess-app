@@ -80,8 +80,29 @@ class StockfishProcess:
         Stockfish reports scores from the side-to-move's perspective,
         so we negate when Black is to move.
         """
+        return self.evaluate_with_options(fen, depth)
+
+    def evaluate_with_options(self, fen: str, depth: int = 18,
+                               options: dict[str, str] | None = None) -> dict | None:
+        """
+        Evaluate a position with optional UCI options set atomically.
+        Thread-safe: options and search happen within a single lock acquisition.
+
+        Args:
+            fen:     FEN string of the position
+            depth:   Search depth
+            options: Dict of UCI option name -> value to set before searching
+                     (e.g., {"Skill Level": "5", "UCI_LimitStrength": "true"})
+        """
         with self._lock:
             try:
+                # Apply UCI options if provided
+                if options:
+                    for name, value in options.items():
+                        self._send("setoption name %s value %s" % (name, value))
+                    self._send("isready")
+                    self._read_until("readyok")
+
                 # Determine whose turn it is (FEN field 2: "w" or "b")
                 black_to_move = " b " in fen
 
@@ -184,6 +205,14 @@ class StockfishProcess:
             return pv_moves
         except ValueError:
             return []
+
+    def set_options(self, options: dict[str, str]) -> None:
+        """Set UCI options without starting a search. Thread-safe."""
+        with self._lock:
+            for name, value in options.items():
+                self._send("setoption name %s value %s" % (name, value))
+            self._send("isready")
+            self._read_until("readyok")
 
     def quit(self) -> None:
         """Cleanly shut down the Stockfish process."""

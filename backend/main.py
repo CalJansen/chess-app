@@ -62,6 +62,13 @@ nn_engines = discover_models()
 for nn_engine in nn_engines:
     register_engine(nn_engine)
 
+# Register Stockfish engines at various Elo levels (if binary available)
+from engines.stockfish_eval import is_available as sf_available
+if sf_available():
+    from engines.stockfish_engine import StockfishEngine
+    for elo in [800, 1000, 1200, 1400, 1600, 2000, 2500]:
+        register_engine(StockfishEngine(elo=elo))
+
 print(f"Total engines: {len(engine_registry)}\n")
 
 # Share the registry with routers
