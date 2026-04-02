@@ -62,12 +62,16 @@ nn_engines = discover_models()
 for nn_engine in nn_engines:
     register_engine(nn_engine)
 
-# Register Stockfish engines at various Elo levels (if binary available)
+# Register Stockfish engines at various strength levels (if binary available)
 from engines.stockfish_eval import is_available as sf_available
 if sf_available():
-    from engines.stockfish_engine import StockfishEngine
+    from engines.stockfish_engine import StockfishEngine, StockfishSkillEngine
+    # Elo-based (UCI_LimitStrength — injects random errors)
     for elo in [800, 1000, 1200, 1400, 1600, 2000, 2500]:
         register_engine(StockfishEngine(elo=elo))
+    # Skill-based (Skill Level — reduces search quality, more human-like)
+    for skill in [0, 3, 5, 8, 10, 13, 15, 18, 20]:
+        register_engine(StockfishSkillEngine(skill=skill))
 
 print(f"Total engines: {len(engine_registry)}\n")
 
